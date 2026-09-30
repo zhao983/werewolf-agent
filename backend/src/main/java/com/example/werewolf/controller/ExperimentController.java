@@ -34,6 +34,29 @@ public class ExperimentController {
     public ExperimentService.StorageInfo storage(HttpServletRequest request) { return service.storageInfo(access.owner(request)); }
     @GetMapping("/games")
     public List<ExperimentService.ArchiveItem> archives(HttpServletRequest request) { return service.archives(access.owner(request)); }
+    @GetMapping("/analysis/options")
+    public ExperimentAnalysis.Options analysisOptions(HttpServletRequest request) { return service.analysisOptions(access.owner(request)); }
+    @PostMapping("/compare")
+    public ExperimentAnalysis.Comparison compare(@RequestBody ExperimentAnalysis.Request body, HttpServletRequest request) {
+        return service.compare(access.owner(request), body);
+    }
+    @PostMapping("/compare/export")
+    public ResponseEntity<byte[]> exportComparison(@RequestBody ExperimentAnalysis.Request body,
+                                                    @RequestParam(defaultValue = "csv") String format, HttpServletRequest request) throws JsonProcessingException {
+        var result = service.compare(access.owner(request), body);
+        byte[] content;
+        if (format.equals("csv")) content = ExperimentCsv.comparison(result).getBytes(StandardCharsets.UTF_8);
+        else if (format.equals("json")) content = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(result);
+        else throw new IllegalArgumentException("对照导出格式只能是 csv 或 json");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .contentType(format.equals("csv") ? new MediaType("text", "csv", StandardCharsets.UTF_8) : MediaType.APPLICATION_JSON)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=experiment-comparison." + format).body(content);
+    }
+    @PatchMapping("/{id}/metadata")
+    public View updateMetadata(@PathVariable String id, @RequestParam String revision,
+                                @RequestBody ExperimentMetadata body, HttpServletRequest request) {
+        return service.updateMetadata(access.owner(request), id, body, revision);
+    }
     @GetMapping("/{id}/games/{gameId}")
     public GameSnapshot replay(@PathVariable String id, @PathVariable String gameId, HttpServletRequest request) {
         return service.replay(access.owner(request), id, gameId);

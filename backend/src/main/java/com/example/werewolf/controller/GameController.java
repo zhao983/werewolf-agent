@@ -5,6 +5,7 @@ import com.example.werewolf.service.GameService.*;
 import com.example.werewolf.game.AdvanceCommand;
 import com.example.werewolf.experiment.ExperimentAccess;
 import com.example.werewolf.experiment.ExperimentService;
+import com.example.werewolf.experiment.ExperimentMetadata;
 import java.io.UncheckedIOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -55,9 +56,13 @@ public class GameController {
     public GameView create(@RequestBody CreateGameRequest request, HttpSession session,
                            HttpServletRequest servletRequest, HttpServletResponse response) {
         String owner = access.getOrCreate(servletRequest, response);
+        if (request == null) throw new IllegalArgumentException("缺少创建对局参数");
+        var metadata = ExperimentMetadata.normalize(request.experimentName(), request.experimentGroup(), request.experimentNotes(),
+                request.seed() == null ? "单局实验" : "单局记录 · " + request.seed());
         GameView game = service.create(request);
         session.setAttribute(OWNER_PREFIX + game.summary().gameId(), Boolean.TRUE);
-        record(owner, game.summary().gameId());
+        var data = service.snapshot(game.summary().gameId());
+        experiments.recordGame(owner, data.config(), data.agentTypes(), data.game(), metadata);
         return game;
     }
 

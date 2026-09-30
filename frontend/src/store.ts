@@ -27,6 +27,9 @@ export const useLabStore = defineStore("lab", {
     agents: Array<AgentType>(7).fill("RANDOM"),
     manual: false,
     knowledgeMode: "NONE" as KnowledgeMode,
+    experimentName: "",
+    experimentGroup: "",
+    experimentNotes: "",
     llm: {
       baseUrl: "",
       apiKey: "",
@@ -100,6 +103,9 @@ export const useLabStore = defineStore("lab", {
           llm: this.agents.includes("LLM") ? this.llm : null,
           manual: this.manual || this.agents.includes("LLM"),
           knowledgeMode: this.knowledgeMode,
+          experimentName: this.experimentName,
+          experimentGroup: this.experimentGroup,
+          experimentNotes: this.experimentNotes,
         };
         const game = (await axios.post<Game>("/api/games", body)).data;
         this.current = game;

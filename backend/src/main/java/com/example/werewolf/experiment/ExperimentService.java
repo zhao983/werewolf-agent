@@ -53,7 +53,12 @@ public class ExperimentService {
         ExperimentRecord record;
         OwnedRun(String owner, ExperimentRecord record) { this.owner = owner; this.record = record; }
     }
-    public record BatchRequest(String name, GameConfig config, List<String> agentTypes, long startSeed, int runs) { }
+    public record BatchRequest(String name, GameConfig config, List<String> agentTypes, long startSeed, int runs,
+                               String group, String notes) {
+        public BatchRequest(String name, GameConfig config, List<String> agentTypes, long startSeed, int runs) {
+            this(name, config, agentTypes, startSeed, runs, "", "");
+        }
+    }
 
     public synchronized View start(String owner, BatchRequest request) {
         if (request == null) throw new IllegalArgumentException("缺少实验配置");
@@ -70,15 +75,14 @@ public class ExperimentService {
         catch (ArithmeticException e) { throw new IllegalArgumentException("随机种子范围溢出"); }
         if (request.startSeed() < -MAX_SAFE_SEED || lastSeed > MAX_SAFE_SEED)
             throw new IllegalArgumentException("种子须在浏览器可精确表示的整数范围内");
-        String name = request.name() == null || request.name().isBlank() ? "基线实验" : request.name().strip();
-        if (name.length() > 80) throw new IllegalArgumentException("实验名称不能超过 80 个字符");
+        var metadata = ExperimentMetadata.normalize(request.name(), request.group(), request.notes(), "基线实验");
         // 限制单个后台批次，避免多次点击或多浏览器同时创建无界任务队列。
         if (records.values().stream().anyMatch(r -> r.record.source().equals("BATCH") && r.record.status().equals("RUNNING")))
             throw new IllegalArgumentException("已有批量实验正在运行，请等待完成或停止后再试");
         String now = Instant.now().toString();
         ExperimentRecord record = new ExperimentRecord(1, ExperimentRecord.ENGINE_VERSION,
-                UUID.randomUUID().toString(), name, "BATCH", "RUNNING", now, now,
-                config, types, request.startSeed(), request.runs(), List.of(), null);
+                UUID.randomUUID().toString(), metadata.name(), "BATCH", "RUNNING", now, now,
+                config, types, request.startSeed(), request.runs(), List.of(), null, metadata.group(), metadata.notes());
         OwnedRun run = new OwnedRun(owner, record);
         save(run);
         records.put(record.id(), run);
@@ -135,13 +139,21 @@ public class ExperimentService {
 
     /** 普通对局每次用户推进后更新，模型失败尝试也会留在记录中。 */
     public synchronized void recordGame(String owner, GameConfig config, List<String> types, GameSnapshot game) {
+        recordGame(owner, config, types, game, null);
+    }
+    public synchronized void recordGame(String owner, GameConfig config, List<String> types, GameSnapshot game,
+                                         ExperimentMetadata initialMetadata) {
         OwnedRun run = records.get(game.gameId());
         if (run != null && !run.owner.equals(owner)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         String now = Instant.now().toString();
         String status = game.status().equals("COMPLETED") ? "COMPLETED" : "RUNNING";
+        var metadata = run == null ? (initialMetadata == null ? ExperimentMetadata.normalize(null, null, null,
+                "单局记录 · " + game.seed()) : ExperimentMetadata.normalize(initialMetadata.name(), initialMetadata.group(),
+                initialMetadata.notes(), "单局记录 · " + game.seed()))
+                : new ExperimentMetadata(run.record.name(), run.record.group(), run.record.notes());
         ExperimentRecord record = new ExperimentRecord(1, ExperimentRecord.ENGINE_VERSION, game.gameId(),
-                "单局记录 · " + game.seed(), "SINGLE", status, game.startedAt(), now,
-                config, types, game.seed(), 1, List.of(game), null);
+                metadata.name(), "SINGLE", status, game.startedAt(), now,
+                config, types, game.seed(), 1, List.of(game), null, metadata.group(), metadata.notes());
         run = new OwnedRun(owner, record);
         save(run);
         records.put(record.id(), run);
@@ -162,7 +174,7 @@ public class ExperimentService {
                 UUID.randomUUID().toString(), original.name(), "IMPORTED",
                 original.status().equals("RUNNING") ? "INTERRUPTED" : original.status(),
                 original.createdAt(), now, original.config(), original.agentTypes(), original.startSeed(),
-                original.requestedGames(), original.games(), original.errorCode());
+                original.requestedGames(), original.games(), original.errorCode(), original.group(), original.notes());
         OwnedRun run = new OwnedRun(owner, record);
         save(run);
         records.put(record.id(), run);
@@ -218,7 +230,30 @@ public class ExperimentService {
     }
     private ExperimentRecord copy(ExperimentRecord r, String status, List<GameSnapshot> games, String error) {
         return new ExperimentRecord(r.schemaVersion(), r.engineVersion(), r.id(), r.name(), r.source(), status,
-                r.createdAt(), Instant.now().toString(), r.config(), r.agentTypes(), r.startSeed(), r.requestedGames(), games, error);
+                r.createdAt(), Instant.now().toString(), r.config(), r.agentTypes(), r.startSeed(), r.requestedGames(), games, error, r.group(), r.notes());
+    }
+
+    /** 整理历史记录也可编辑；版本校验避免覆盖另一页面或正在推进的新记录。 */
+    public synchronized View updateMetadata(String owner, String id, ExperimentMetadata metadata, String expectedRevision) {
+        OwnedRun run = owned(owner, id);
+        if (metadata == null) throw new IllegalArgumentException("缺少实验标签");
+        if (!ExperimentMetadata.revision(run.record.name(), run.record.group(), run.record.notes()).equals(expectedRevision))
+            throw new IllegalArgumentException("实验标签已在其他页面修改，请刷新后重新编辑");
+        var value = ExperimentMetadata.normalize(metadata.name(), metadata.group(), metadata.notes(), run.record.name());
+        var r = run.record;
+        var next = new ExperimentRecord(r.schemaVersion(), r.engineVersion(), r.id(), value.name(), r.source(), r.status(),
+                r.createdAt(), Instant.now().toString(), r.config(), r.agentTypes(), r.startSeed(), r.requestedGames(), r.games(), r.errorCode(), value.group(), value.notes());
+        save(new OwnedRun(owner, next)); run.record = next;
+        return next.view();
+    }
+    private List<ExperimentRecord> visibleRecords(String owner) {
+        return owner == null ? List.of() : records.values().stream().filter(r -> r.owner.equals(owner)).map(r -> r.record).toList();
+    }
+    public synchronized ExperimentAnalysis.Options analysisOptions(String owner) {
+        return ExperimentAnalysis.options(visibleRecords(owner));
+    }
+    public synchronized ExperimentAnalysis.Comparison compare(String owner, ExperimentAnalysis.Request request) {
+        return ExperimentAnalysis.compare(visibleRecords(owner), request);
     }
 
     private void load() {

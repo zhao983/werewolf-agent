@@ -124,4 +124,33 @@ class ExperimentControllerTest {
         assertEquals(123, after.path("record").path("games").get(0).path("seed").asInt());
         mvc.perform(get("/api/games/" + id).session(session)).andExpect(jsonPath("$.players[0].role").isEmpty());
     }
+
+    @Test
+    void singleLabelsCanBeEditedAndComparedWithoutCrossBrowserAccess() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        var response = mvc.perform(post("/api/games").session(session).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"manual\":false,\"seed\":21,\"experimentName\":\"研究 A\",\"experimentGroup\":\"A\",\"experimentNotes\":\"备注\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        String id = mapper.readTree(response.getContentAsString()).path("summary").path("gameId").asText();
+        Cookie cookie = response.getCookie(ExperimentAccess.COOKIE_NAME);
+        var before = mapper.readTree(mvc.perform(get("/api/experiments/" + id).cookie(cookie)).andReturn().getResponse().getContentAsString());
+        assertEquals("A", before.path("record").path("group").asText());
+        mvc.perform(patch("/api/experiments/" + id + "/metadata").param("revision", before.path("metadataRevision").asText())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"研究 B\",\"group\":\"B\",\"notes\":\"新备注\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/experiments/" + id + "/metadata").cookie(cookie).param("revision", before.path("metadataRevision").asText())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"研究 B\",\"group\":\"B\",\"notes\":\"新备注\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.record.group").value("B"));
+        String compare = "{\"nameA\":\"B 组\",\"groupA\":{\"group\":\"B\"},\"groupB\":{\"group\":\"A\"}}";
+        mvc.perform(post("/api/experiments/compare").cookie(cookie).contentType(MediaType.APPLICATION_JSON).content(compare))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.groupA.metrics.completedGames").value(1))
+                .andExpect(jsonPath("$.groupB.metrics.wolfWinRate").isEmpty()).andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(post("/api/experiments/compare").contentType(MediaType.APPLICATION_JSON).content(compare))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.groupA.metrics.matchedGames").value(0));
+        mvc.perform(get("/api/experiments/analysis/options").cookie(cookie)).andExpect(status().isOk()).andExpect(jsonPath("$.groups").isArray());
+        mvc.perform(post("/api/experiments/compare/export").cookie(cookie).param("format", "csv").contentType(MediaType.APPLICATION_JSON).content(compare))
+                .andExpect(status().isOk()).andExpect(header().string("Content-Disposition", "attachment; filename=experiment-comparison.csv"));
+        mvc.perform(post("/api/experiments/compare/export").cookie(cookie).param("format", "json").contentType(MediaType.APPLICATION_JSON).content(compare))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.groupA.name").value("B 组"));
+    }
 }

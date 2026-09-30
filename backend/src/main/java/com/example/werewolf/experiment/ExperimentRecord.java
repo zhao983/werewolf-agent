@@ -12,11 +12,20 @@ import com.example.werewolf.knowledge.KnowledgeBase.Run;
 public record ExperimentRecord(int schemaVersion, String engineVersion, String id, String name,
                                String source, String status, String createdAt, String updatedAt,
                                GameConfig config, List<String> agentTypes, long startSeed,
-                               int requestedGames, List<GameSnapshot> games, String errorCode) {
+                               int requestedGames, List<GameSnapshot> games, String errorCode, String group, String notes) {
     public static final String ENGINE_VERSION = "0.2.0-experiment-v1";
     public ExperimentRecord {
         agentTypes = List.copyOf(agentTypes);
         games = List.copyOf(games);
+        // 老版本没有分组和备注，读取时按未分组兼容。
+        group = group == null ? "" : group;
+        notes = notes == null ? "" : notes;
+    }
+    public ExperimentRecord(int schemaVersion, String engineVersion, String id, String name,
+                            String source, String status, String createdAt, String updatedAt, GameConfig config,
+                            List<String> agentTypes, long startSeed, int requestedGames, List<GameSnapshot> games, String errorCode) {
+        this(schemaVersion, engineVersion, id, name, source, status, createdAt, updatedAt, config,
+                agentTypes, startSeed, requestedGames, games, errorCode, "", "");
     }
 
     /** 模型配置只保留可比较参数；API Key 与服务地址不进入记录。 */
@@ -89,11 +98,16 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
                     actions.stream().mapToLong(a -> a.metrics().requestMillis()).sum());
         }
     }
-    public record View(ExperimentRecord record, Summary summary) { }
-    public View view() { return new View(this, Summary.of(games)); }
+    public record View(ExperimentRecord record, Summary summary, String metadataRevision) { }
+    public View view() { return new View(this, Summary.of(games), ExperimentMetadata.revision(name, group, notes)); }
     public record ListItem(String id, String name, String source, String status, String createdAt,
-                            long startSeed, int requestedGames, int recordedGames, Summary summary) { }
+                            long startSeed, int requestedGames, int recordedGames, Summary summary,
+                            String group, String notes, GameConfig config, List<String> agentTypes,
+                            List<String> models, List<String> knowledgeModes, List<String> knowledgeRevisions) { }
     public ListItem listItem() {
-        return new ListItem(id, name, source, status, createdAt, startSeed, requestedGames, games.size(), Summary.of(games));
+        return new ListItem(id, name, source, status, createdAt, startSeed, requestedGames, games.size(), Summary.of(games),
+                group, notes, config, agentTypes, games.stream().map(ExperimentAnalysis::model).distinct().sorted().toList(),
+                games.stream().map(ExperimentAnalysis::knowledgeMode).distinct().sorted().toList(),
+                games.stream().map(ExperimentAnalysis::knowledgeRevision).filter(java.util.Objects::nonNull).distinct().sorted().toList());
     }
 }

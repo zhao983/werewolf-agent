@@ -50,6 +50,7 @@ public final class ExperimentImport {
     static void validate(ExperimentRecord r) {
         require(r != null && r.schemaVersion() == 1, "不支持的实验版本，目前支持 schemaVersion = 1");
         uuid(r.id()); text(r.name(), 80); text(r.engineVersion(), 100);
+        text(r.group(), 60); text(r.notes(), 2000);
         require(Set.of("BATCH", "SINGLE", "IMPORTED").contains(r.source()), "实验来源无效");
         require(Set.of("RUNNING", "COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED").contains(r.status()), "实验状态无效");
         instant(r.createdAt()); instant(r.updatedAt());
@@ -157,7 +158,8 @@ public final class ExperimentImport {
         require(m != null, "缺少行动指标");
         for (long n : new long[]{m.apiCalls(), m.apiFailures(), m.invalidReplies(), m.usageReportedCalls(),
                 m.promptTokens(), m.completionTokens(), m.totalTokens(), m.requestMillis()}) number(n);
-        require(m.apiCalls() <= 100_000 && m.apiFailures() <= m.apiCalls() && m.usageReportedCalls() <= m.apiCalls(), "调用指标无效");
+        require(m.apiCalls() <= 100_000 && m.apiFailures() <= m.apiCalls() && m.usageReportedCalls() <= m.apiCalls()
+                && m.invalidReplies() <= m.apiCalls(), "调用指标无效");
     }
     private static void number(long n) { require(n >= 0 && n <= MAX_NUMBER, "指标数值无效"); }
     private static void seed(long n) { require(n >= -9_007_199_254_740_991L && n <= 9_007_199_254_740_991L, "随机种子超出浏览器整数范围"); }

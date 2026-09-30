@@ -10,10 +10,20 @@ import {
   type ExperimentView,
 } from "../experiments";
 import { roleName, phaseName } from "../types";
+import ExperimentLabelFields from "../components/ExperimentLabelFields.vue";
+import AnalysisFilters from "../components/AnalysisFilters.vue";
+import {
+  configKey,
+  emptyFilter,
+  type AnalysisOptions,
+  type ExperimentMetadata,
+} from "../analysis";
 
 const route = useRoute();
 const form = ref<BatchRequest>({
   name: "Random 基线",
+  group: "",
+  notes: "",
   runs: 20,
   startSeed: 1,
   config: { playerCount: 7, werewolves: 2, villagers: 3, seers: 1, witches: 1 },
@@ -33,6 +43,35 @@ const notice = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
 const importing = ref(false);
 const storageDirectory = ref("");
+const recordFilter = ref(emptyFilter());
+const searchText = ref("");
+const editingMetadata = ref(false);
+const metadataBusy = ref(false);
+const metadataVersion = ref("");
+const metadataDraft = ref<ExperimentMetadata>({
+  name: "",
+  group: "",
+  notes: "",
+});
+const filterOptions = computed<AnalysisOptions>(() => {
+  const sorted = (values: string[]) => [...new Set(values)].sort();
+  return {
+    groups: sorted(items.value.map((i) => i.group ?? "")),
+    models: sorted(items.value.flatMap((i) => i.models ?? [])),
+    configs: sorted(
+      items.value.filter((i) => i.config).map((i) => configKey(i.config)),
+    ),
+    knowledgeModes: sorted(items.value.flatMap((i) => i.knowledgeModes ?? [])),
+    knowledgeRevisions: sorted(
+      items.value.flatMap((i) => i.knowledgeRevisions ?? []),
+    ),
+    agentTypes: sorted(
+      items.value
+        .filter((i) => i.agentTypes)
+        .map((i) => i.agentTypes.join("/")),
+    ),
+  };
+});
 const sourceName: Record<string, string> = {
   BATCH: "批量",
   SINGLE: "单局",
@@ -82,7 +121,24 @@ const activeBatch = computed(
       detail.value.record.status === "RUNNING"),
 );
 const filteredItems = computed(() =>
-  items.value.filter((i) => scope.value === "ALL" || i.source === scope.value),
+  items.value.filter((i) => {
+    const f = recordFilter.value;
+    return (
+      (scope.value === "ALL" || i.source === scope.value) &&
+      (f.group === null || f.group === (i.group ?? "")) &&
+      (f.model === null || (i.models ?? []).includes(f.model)) &&
+      (f.config === null || (i.config && f.config === configKey(i.config))) &&
+      (f.knowledgeMode === null ||
+        (i.knowledgeModes ?? []).includes(f.knowledgeMode)) &&
+      (f.knowledgeRevision === null ||
+        (i.knowledgeRevisions ?? []).includes(f.knowledgeRevision)) &&
+      (f.agentTypes === null ||
+        (i.agentTypes && f.agentTypes === i.agentTypes.join("/"))) &&
+      `${i.name} ${i.group ?? ""} ${i.notes ?? ""}`
+        .toLowerCase()
+        .includes(searchText.value.trim().toLowerCase())
+    );
+  }),
 );
 // 导入副本默认不进入本机实验总览，避免重复导入改变论文统计。
 const localItems = computed(() =>
@@ -169,6 +225,8 @@ function reuse(value: ExperimentRecord) {
     agentTypes: value.agentTypes as ("RANDOM" | "RULE")[],
     startSeed: value.startSeed,
     runs: value.requestedGames,
+    group: value.group ?? "",
+    notes: value.notes ?? "",
   };
   form.value.agentTypes = [...form.value.agentTypes];
   notice.value =
@@ -177,6 +235,7 @@ function reuse(value: ExperimentRecord) {
 async function select(id: string) {
   const request = ++detailRequest;
   if (selectedId.value !== id) {
+    editingMetadata.value = false;
     detail.value = null;
     selectedGameId.value = "";
     cancelRequested.value = false;
@@ -194,6 +253,46 @@ async function select(id: string) {
   } finally {
     if (mounted && request === detailRequest) loadingDetail.value = false;
   }
+}
+function editLabels() {
+  if (!record.value) return;
+  metadataDraft.value = {
+    name: record.value.name,
+    group: record.value.group ?? "",
+    notes: record.value.notes ?? "",
+  };
+  metadataVersion.value = detail.value?.metadataRevision ?? "";
+  editingMetadata.value = true;
+}
+async function saveLabels() {
+  if (!record.value || metadataBusy.value) return;
+  const id = record.value.id;
+  metadataBusy.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    const value = await experimentApi.updateMetadata(
+      id,
+      metadataVersion.value,
+      metadataDraft.value,
+    );
+    if (!mounted) return;
+    if (selectedId.value === id) {
+      detail.value = value;
+      editingMetadata.value = false;
+    }
+    notice.value = "实验标签已保存，继续推进对局时会保留这些标签。";
+    await refresh();
+  } catch (e) {
+    if (mounted) error.value = experimentError(e);
+  } finally {
+    if (mounted) metadataBusy.value = false;
+  }
+}
+function clearFilters() {
+  recordFilter.value = emptyFilter();
+  searchText.value = "";
+  scope.value = "ALL";
 }
 async function refresh() {
   if (!mounted || refreshing) return;
@@ -336,6 +435,9 @@ onBeforeUnmount(() => {
         </p>
       </div>
       <div class="experiment-actions">
+        <RouterLink to="/analysis" class="experiment-button"
+          >对照分析 →</RouterLink
+        >
         <input
           ref="importInput"
           type="file"
@@ -399,9 +501,11 @@ onBeforeUnmount(() => {
         <p class="muted">
           每局使用一个种子：起始种子、起始种子 + 1…；仅 Random / Rule 自动运行。
         </p>
-        <label class="config-field"
-          >实验名称<input v-model="form.name" maxlength="80"
-        /></label>
+        <ExperimentLabelFields
+          v-model:name="form.name"
+          v-model:group="form.group"
+          v-model:notes="form.notes"
+        />
         <div class="experiment-fields">
           <label class="config-field"
             >局数<input
@@ -507,8 +611,22 @@ onBeforeUnmount(() => {
             <option value="IMPORTED">导入记录</option>
           </select>
         </div>
+        <div class="record-search-row">
+          <input
+            v-model="searchText"
+            aria-label="搜索实验记录"
+            placeholder="搜索名称、分组或备注…"
+          />
+          <button class="subtle-button" @click="clearFilters">清空筛选</button>
+        </div>
+        <AnalysisFilters v-model="recordFilter" :options="filterOptions" />
+        <p class="muted">
+          {{ filteredItems.length }} /
+          {{ items.length }}
+          条记录符合条件。筛选作用于记录列表，顶部为本机全部运行概览。
+        </p>
         <div v-if="!filteredItems.length" class="empty-small">
-          还没有记录。运行一次实验，或在总览创建对局。
+          当前条件暂无记录。可清空筛选，或创建、导入实验记录。
         </div>
         <div class="experiment-records">
           <button
@@ -524,7 +642,9 @@ onBeforeUnmount(() => {
                 >{{ date(item.createdAt) }} ·
                 {{ sourceName[item.source] ?? item.source }} · 种子
                 {{ item.startSeed }}</small
-              ></span
+              ><small class="record-group-tag">{{
+                item.group || "未分组"
+              }}</small></span
             >
             <span
               ><b
@@ -557,6 +677,13 @@ onBeforeUnmount(() => {
         </div>
         <div class="experiment-actions">
           <button
+            class="experiment-button"
+            :disabled="metadataBusy"
+            @click="editLabels"
+          >
+            编辑实验标签
+          </button>
+          <button
             v-if="!record.agentTypes.includes('LLM')"
             class="experiment-button"
             @click="reuse(record)"
@@ -573,6 +700,34 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </div>
+      <p class="experiment-label-summary">
+        分组：{{ record.group || "未分组"
+        }}<span v-if="record.notes"> · 备注：{{ record.notes }}</span>
+      </p>
+      <form
+        v-if="editingMetadata"
+        class="experiment-label-editor"
+        @submit.prevent="saveLabels"
+      >
+        <fieldset :disabled="metadataBusy">
+          <ExperimentLabelFields
+            v-model:name="metadataDraft.name"
+            v-model:group="metadataDraft.group"
+            v-model:notes="metadataDraft.notes"
+          />
+          <div class="experiment-actions">
+            <button class="primary-button" type="submit">
+              {{ metadataBusy ? "正在保存…" : "保存实验标签" }}</button
+            ><button
+              class="subtle-button"
+              type="button"
+              @click="editingMetadata = false"
+            >
+              取消编辑
+            </button>
+          </div>
+        </fieldset>
+      </form>
       <progress
         v-if="record.source === 'BATCH'"
         :value="record.games.length"
@@ -833,6 +988,45 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.record-search-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.record-search-row input {
+  flex: 1;
+  min-width: 150px;
+  background: #141e29;
+  color: #eeeae1;
+  border: 1px solid #ffffff25;
+  border-radius: 5px;
+  padding: 9px;
+  font-size: 12px;
+}
+.record-group-tag {
+  color: #c5aa76;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.experiment-label-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #aeb8b9;
+  line-height: 1.8;
+}
+.experiment-label-editor {
+  margin: 16px 0;
+  padding: 16px;
+  background: #141e29;
+  border-radius: 8px;
+}
+.experiment-label-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
 .experiment-layout {
   display: grid;
   grid-template-columns: minmax(330px, 0.9fr) minmax(320px, 1.1fr);

@@ -80,10 +80,13 @@ export interface ExperimentRecord {
   requestedGames: number;
   games: ExperimentGame[];
   errorCode: string | null;
+  group: string;
+  notes: string;
 }
 export interface ExperimentView {
   record: ExperimentRecord;
   summary: ExperimentSummary;
+  metadataRevision: string;
 }
 export interface ExperimentItem {
   id: string;
@@ -95,6 +98,13 @@ export interface ExperimentItem {
   requestedGames: number;
   recordedGames: number;
   summary: ExperimentSummary;
+  group: string;
+  notes: string;
+  config: GameConfig;
+  agentTypes: ("RANDOM" | "RULE" | "LLM")[];
+  models: string[];
+  knowledgeModes: string[];
+  knowledgeRevisions: string[];
 }
 export interface BatchRequest {
   name: string;
@@ -102,6 +112,8 @@ export interface BatchRequest {
   agentTypes: ("RANDOM" | "RULE")[];
   startSeed: number;
   runs: number;
+  group?: string;
+  notes?: string;
 }
 export interface ArchiveItem {
   experimentId: string;
@@ -116,6 +128,18 @@ export interface ArchiveItem {
   startedAt: string;
 }
 export const experimentApi = {
+  updateMetadata: async (
+    id: string,
+    revision: string,
+    metadata: import("./analysis").ExperimentMetadata,
+  ) =>
+    (
+      await axios.patch<ExperimentView>(
+        `/api/experiments/${id}/metadata`,
+        metadata,
+        { params: { revision } },
+      )
+    ).data,
   backfillObserver: async (id: string, gameId: string, notes: ObserverNote[]) =>
     (
       await axios.post<ExperimentGame>(

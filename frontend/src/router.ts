@@ -6,6 +6,7 @@ import SettingsView from "./views/SettingsView.vue";
 import StatsView from "./views/StatsView.vue";
 import ArchiveReplayView from "./views/ArchiveReplayView.vue";
 import KnowledgeView from "./views/KnowledgeView.vue";
+import AnalysisView from "./views/AnalysisView.vue";
 
 // 对局详情页同时承载进行中操作和已完成回放。
 export default createRouter({
@@ -16,6 +17,7 @@ export default createRouter({
     { path: "/history", component: HistoryView },
     { path: "/settings", component: SettingsView },
     { path: "/knowledge", component: KnowledgeView },
+    { path: "/analysis", component: AnalysisView },
     { path: "/experiments", component: StatsView },
     {
       path: "/experiments/:experimentId/replay/:gameId",

@@ -38,6 +38,14 @@ const store = useLabStore();
           ><span class="nav-text">实验记录</span></RouterLink
         >
         <RouterLink
+          to="/analysis"
+          active-class="active"
+          aria-label="对照分析"
+          title="对照分析"
+          ><span aria-hidden="true">⇄</span
+          ><span class="nav-text">对照分析</span></RouterLink
+        >
+        <RouterLink
           to="/knowledge"
           active-class="active"
           aria-label="本地知识库"

@@ -210,9 +210,13 @@ public class GameService {
     }
 
     public record CreateGameRequest(GameConfig config, List<String> agentTypes, Long seed,
-                                    LlmConfig llm, Boolean manual, Mode knowledgeMode) {
+                                    LlmConfig llm, Boolean manual, Mode knowledgeMode,
+                                    String experimentName, String experimentGroup, String experimentNotes) {
         public CreateGameRequest(GameConfig config, List<String> agentTypes, Long seed, LlmConfig llm, Boolean manual) {
-            this(config, agentTypes, seed, llm, manual, Mode.NONE);
+            this(config, agentTypes, seed, llm, manual, Mode.NONE, null, null, null);
+        }
+        public CreateGameRequest(GameConfig config, List<String> agentTypes, Long seed, LlmConfig llm, Boolean manual, Mode knowledgeMode) {
+            this(config, agentTypes, seed, llm, manual, knowledgeMode, null, null, null);
         }
     }
     public record GameSummary(String gameId, GameResult result, int days, int eventCount,

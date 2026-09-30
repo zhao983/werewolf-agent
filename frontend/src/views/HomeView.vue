@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useLabStore } from "../store";
 import type { AgentType } from "../types";
+import ExperimentLabelFields from "../components/ExperimentLabelFields.vue";
 
 const store = useLabStore();
 const router = useRouter();
@@ -199,6 +200,14 @@ async function start() {
             >配置模型参数 →</RouterLink
           >
         </div>
+        <details class="knowledge-setup experiment-label-setup">
+          <summary>实验名称、分组与备注</summary>
+          <ExperimentLabelFields
+            v-model:name="store.experimentName"
+            v-model:group="store.experimentGroup"
+            v-model:notes="store.experimentNotes"
+          />
+        </details>
         <div v-if="hasLlm" class="knowledge-setup">
           <label
             >AI 策略知识
@@ -292,6 +301,10 @@ async function start() {
 </template>
 
 <style scoped>
+.experiment-label-setup summary {
+  cursor: pointer;
+  color: #c5aa76;
+}
 .knowledge-setup {
   border-top: 1px solid #ffffff15;
   margin-top: 18px;
