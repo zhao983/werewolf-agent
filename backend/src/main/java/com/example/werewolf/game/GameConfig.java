@@ -10,6 +10,9 @@ public record GameConfig(int playerCount, int werewolves, int villagers, int see
         if (playerCount < 3 || playerCount > 20) throw new IllegalArgumentException("玩家总数须在 3 到 20 人之间");
         if (werewolves < 1 || villagers < 0 || seers < 0 || witches < 0)
             throw new IllegalArgumentException("至少需要 1 名狼人，其他身份数量不能为负数");
+        // 先限制单项数量，防止恶意大整数让总和溢出后绕过校验并分配海量身份牌。
+        if (werewolves > playerCount || villagers > playerCount || seers > playerCount || witches > playerCount)
+            throw new IllegalArgumentException("单种身份数量不能超过玩家总数");
         if (werewolves + villagers + seers + witches != playerCount)
             throw new IllegalArgumentException("各身份数量之和必须等于玩家总数");
         if (werewolves >= playerCount - werewolves)

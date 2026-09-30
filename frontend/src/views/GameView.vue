@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { experimentApi } from "../experiments";
+import ObserverPanel from "../components/ObserverPanel.vue";
 import { useLabStore } from "../store";
 import {
   phaseName,
@@ -8,12 +10,12 @@ import {
   roleName,
   type AdvanceCommand,
   type GameEvent,
-  type ObserverNote,
   type Role,
 } from "../types";
 
 const store = useLabStore();
 const route = useRoute();
+const router = useRouter();
 const cursor = ref(0);
 const playing = ref(false);
 const reveal = ref(false);
@@ -36,13 +38,6 @@ const isNight = computed(
 const finished = computed(() => current.value?.type === "GAME_OVER");
 const secretsVisible = computed(
   () => !live.value && (reveal.value || finished.value),
-);
-const privateNotes = computed(() =>
-  (observer.value?.notes ?? [])
-    .filter((note) => (live.value || note.eventIndex <= cursor.value)
-      && (selectedPlayerId.value === "all" || note.playerId === selectedPlayerId.value))
-    .slice()
-    .reverse(),
 );
 const winnerText = computed(() =>
   game.value?.summary.result === "WEREWOLF_WIN"
@@ -74,35 +69,23 @@ const actionLabel = computed(() => {
 
 // 身份仅从观战接口取出并显示在用户页面；Agent 决策仍使用独立的 AgentContext。
 function observerRole(id: string): Role | null {
-  return observer.value?.players.find((player) => player.id === id)?.role
-    ?? game.value?.players.find((player) => player.id === id)?.role
-    ?? null;
+  return (
+    observer.value?.players.find((player) => player.id === id)?.role ??
+    game.value?.players.find((player) => player.id === id)?.role ??
+    null
+  );
 }
 function showRole(id: string) {
   return secretsVisible.value || hoveredPlayerId.value === id;
 }
 function onPlayerFocus(event: FocusEvent, id: string) {
   // 鼠标点击造成的焦点不应让身份在鼠标移出后仍保持显示；键盘焦点仍可查看。
-  if (event.target instanceof HTMLElement && event.target.matches(":focus-visible"))
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.matches(":focus-visible")
+  )
     hoveredPlayerId.value = id;
 }
-function describeNote(note: ObserverNote) {
-  if (note.kind === "CLUE") {
-    const teammate = /^Wolf teammate: (.*)$/.exec(note.text);
-    if (teammate) return `狼队友：${teammate[1] || "无"}`;
-    const check = /^Night (\d+): (player\d+) is (WEREWOLF|GOOD)$/.exec(note.text);
-    if (check) return `第 ${check[1]} 夜查验 ${check[2]}：${check[3] === "WEREWOLF" ? "狼人" : "好人"}`;
-    return note.text;
-  }
-  const decision = /^([A-Z]+)(?: → (player\d+))?(?:｜([\s\S]*))?$/.exec(note.text);
-  if (!decision) return note.text;
-  const action: Record<string, string> = {
-    SPEAK: "发言", VOTE: "投票", KILL: "袭击", CHECK: "查验",
-    SAVE: "救人", POISON: "用毒", PASS: "跳过",
-  };
-  return `${action[decision[1]] ?? decision[1]}${decision[2] ? ` → ${decision[2]}` : ""}${decision[3] ? ` · ${decision[3]}` : " · 未提供决策说明"}`;
-}
-
 function displayEvent(event: GameEvent) {
   if (!secretsVisible.value) {
     if (event.type === "ROLE_ASSIGNED") return `${event.actorId} 已收到身份牌`;
@@ -157,6 +140,25 @@ async function advance(command: AdvanceCommand) {
 function resetCursor() {
   cursor.value = live.value ? Math.max(0, events.value.length - 1) : 0;
 }
+// 原对局链接在后端重启后转到持久化回放；仍需本浏览器的存档访问凭据。
+async function loadOrReplay(id: string) {
+  await store.loadGame(id);
+  if (route.params.id !== id || store.current) return;
+  try {
+    const archives = await experimentApi.archives();
+    const saved = archives.find(
+      (a) => a.gameId === id && a.source === "SINGLE",
+    );
+    if (saved && route.params.id === id) {
+      store.error = "";
+      await router.replace(
+        `/experiments/${saved.experimentId}/replay/${saved.gameId}`,
+      );
+    }
+  } catch {
+    /* 保留原有的载入错误，存档读取失败不能伪装成成功。 */
+  }
+}
 watch(
   () => route.params.id,
   async (id) => {
@@ -165,14 +167,14 @@ watch(
     hoveredPlayerId.value = null;
     selectedPlayerId.value = "all";
     if (id) {
-      await store.loadGame(String(id));
+      await loadOrReplay(String(id));
       if (route.params.id === id) resetCursor();
     }
   },
 );
 onMounted(async () => {
   const id = String(route.params.id);
-  await store.loadGame(id);
+  await loadOrReplay(id);
   if (route.params.id === id) resetCursor();
 });
 onBeforeUnmount(stop);
@@ -188,6 +190,11 @@ onBeforeUnmount(stop);
           {{ game.summary.gameId.slice(0, 8).toUpperCase() }}
         </div>
         <h1>{{ live ? "对局进行中" : "对局回放" }}</h1>
+        <RouterLink
+          :to="`/experiments?id=${game.summary.gameId}`"
+          class="small-link"
+          >查看实验记录与导出 →</RouterLink
+        >
         <p>
           {{
             live
@@ -285,7 +292,9 @@ onBeforeUnmount(stop);
               {{ finished ? "身份已揭晓" : reveal ? "隐藏身份" : "揭晓身份" }}
             </button>
           </div>
-          <p class="player-hint">将鼠标移到身份牌上查看身份；点击玩家筛选下方的私有记录。</p>
+          <p class="player-hint">
+            将鼠标移到身份牌上查看身份；点击玩家筛选下方的私有记录。
+          </p>
           <div class="player-grid">
             <button
               v-for="player in game.players"
@@ -320,40 +329,25 @@ onBeforeUnmount(stop);
                 <strong>{{ player.name }}</strong
                 ><span>{{
                   showRole(player.id) && observerRole(player.id)
-                    ? `${roleName[observerRole(player.id)!]}${dead.has(player.id) ? ' · 已出局' : ''}`
-                    : dead.has(player.id) ? "已出局" : "身份隐藏"
+                    ? `${roleName[observerRole(player.id)!]}${dead.has(player.id) ? " · 已出局" : ""}`
+                    : dead.has(player.id)
+                      ? "已出局"
+                      : "身份隐藏"
                 }}</span>
               </div>
               <span v-if="dead.has(player.id)" class="dead-mark">✕</span>
             </button>
           </div>
         </div>
-        <div class="panel observer-panel">
-          <div class="section-head">
-            <div>
-              <span class="section-index">OBSERVER ONLY</span>
-              <h2>观战私有信息</h2>
-            </div>
-            <select v-model="selectedPlayerId" aria-label="筛选玩家的私有记录">
-              <option value="all">全部玩家</option>
-              <option v-for="player in game.players" :key="player.id" :value="player.id">
-                {{ player.name }}
-              </option>
-            </select>
-          </div>
-          <p class="observer-description">这里展示玩家收到的私有线索和每步决策摘要，仅供本地观战；其他 Agent 不会读取此面板。</p>
-          <div v-if="!observer" class="observer-empty">观战信息尚未载入。</div>
-          <div v-else-if="!privateNotes.length" class="observer-empty">当前回放位置暂无该玩家的私有记录。</div>
-          <div v-else class="observer-list">
-            <div v-for="(note, index) in privateNotes" :key="`${note.playerId}-${note.day}-${note.phase}-${index}`" class="observer-entry">
-              <div class="observer-entry-meta">
-                <span>{{ note.playerId }} · 第 {{ note.day }} 天 · {{ phaseName[note.phase] ?? note.phase }}</span>
-                <span>{{ note.kind === "CLUE" ? "私有线索" : "决策摘要" }}</span>
-              </div>
-              <p>{{ describeNote(note) }}</p>
-            </div>
-          </div>
-        </div>
+        <ObserverPanel
+          v-model:selected-player-id="selectedPlayerId"
+          :notes="observer?.notes ?? null"
+          :players="game.players.map((p) => p.id)"
+          :cursor="cursor"
+          :live="live"
+          :knowledge="observer?.knowledge"
+          :event-count="events.length"
+        />
         <div v-if="!live" class="panel timeline-panel">
           <div class="section-head">
             <div>

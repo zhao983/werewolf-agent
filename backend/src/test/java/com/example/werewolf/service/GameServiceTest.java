@@ -12,6 +12,20 @@ import static org.junit.jupiter.api.Assertions.*;
 /** 检查进行中接口的保密边界和每次推进的粒度。 */
 class GameServiceTest {
     @Test
+    void omittedSeedIsRecordedAndCanReproduceTheInitialAssignment() {
+        GameService service = new GameService(new ObjectMapper());
+        var first = service.create(new GameService.CreateGameRequest(GameConfig.classicSeven(), null, null, null, true));
+        var snapshot = service.snapshot(first.summary().gameId());
+        long seed = snapshot.game().seed();
+        assertTrue(seed >= 0 && seed <= 9_007_199_254_740_991L);
+        var repeated = service.create(new GameService.CreateGameRequest(GameConfig.classicSeven(), null, seed, null, true));
+        assertEquals(snapshot.game().seats(), service.snapshot(repeated.summary().gameId()).game().seats());
+        assertEquals(snapshot.game().events(), service.snapshot(repeated.summary().gameId()).game().events());
+        assertThrows(IllegalArgumentException.class, () -> service.create(
+                new GameService.CreateGameRequest(GameConfig.classicSeven(), null, Long.MAX_VALUE, null, true)));
+    }
+
+    @Test
     void llmGameStartsPausedAndResponseDoesNotExposeRolesOrKey() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         GameService service = new GameService(mapper);

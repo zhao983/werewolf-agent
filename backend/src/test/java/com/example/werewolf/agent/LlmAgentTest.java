@@ -55,9 +55,13 @@ class LlmAgentTest {
                     ? "{\"action\":\"VOTE\",\"targetPlayerId\":\"player3\"}"
                     : "{\"action\":\"VOTE\",\"targetPlayerId\":\"player5\"}";
         };
-        AgentResponse response = new LlmAgent(client, config, mapper).act(voteContext(List.of()));
+        LlmAgent agent = new LlmAgent(client, config, mapper);
+        AgentResponse response = agent.act(voteContext(List.of()));
         assertEquals("player5", response.targetPlayerId());
         assertEquals(2, calls.get());
+        assertEquals(2, agent.lastMetrics().apiCalls());
+        assertEquals(1, agent.lastMetrics().invalidReplies());
+        assertEquals(0, agent.lastMetrics().usageReportedCalls());
         assertTrue(prompt.get().contains("上次回复无法作为合法动作"));
         assertTrue(prompt.get().contains("reasoning"));
     }
@@ -65,9 +69,33 @@ class LlmAgentTest {
     @Test
     void preservesModelServiceErrorInsteadOfCallingItUnreadable() {
         LlmClient client = (settings, prompt) -> { throw new IllegalStateException("Model API returned HTTP 429"); };
+        LlmAgent agent = new LlmAgent(client, config, mapper);
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> new LlmAgent(client, config, mapper).act(voteContext(List.of())));
+                () -> agent.act(voteContext(List.of())));
         assertEquals("Model API returned HTTP 429", error.getMessage());
+        assertEquals(1, agent.lastMetrics().apiCalls());
+        assertEquals(1, agent.lastMetrics().apiFailures());
+    }
+
+    @Test
+    void reportsUsageForAllRetriesAndResetsMetricsForNextDecision() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmClient client = new LlmClient() {
+            public String chat(LlmConfig settings, String prompt) { throw new UnsupportedOperationException(); }
+            public ChatResult chatWithUsage(LlmConfig settings, String prompt) {
+                String reply = calls.incrementAndGet() == 1 ? "unreadable" : "{\"action\":\"VOTE\",\"targetPlayerId\":\"player4\"}";
+                return new ChatResult(reply, 20L, 5L, 25L);
+            }
+        };
+        LlmAgent agent = new LlmAgent(client, config, mapper);
+        agent.act(voteContext(List.of()));
+        assertEquals(2, agent.lastMetrics().usageReportedCalls());
+        assertEquals(50, agent.lastMetrics().totalTokens());
+        assertEquals(1, agent.lastMetrics().invalidReplies());
+        agent.act(voteContext(List.of()));
+        assertEquals(1, agent.lastMetrics().apiCalls());
+        assertEquals(25, agent.lastMetrics().totalTokens());
+        assertEquals(0, agent.lastMetrics().invalidReplies());
     }
 
     @Test

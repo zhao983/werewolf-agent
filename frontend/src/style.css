@@ -106,6 +106,10 @@ a {
   width: 18px;
   text-align: center;
 }
+.main-nav a .nav-text {
+  font-size: 13px;
+  width: auto;
+}
 .main-nav a:hover,
 .main-nav a.active {
   color: #ead5ab;
@@ -765,6 +769,25 @@ a {
   color: #727f88;
   margin-top: 16px;
 }
+/* 历史与存档回放共用的提示；外部 JSON 文本按普通文本显示并允许换行。 */
+.game-page .experiment-message,
+.page > .experiment-message {
+  padding: 12px 16px;
+  border: 1px solid #a9865444;
+  background: #a9865410;
+  border-radius: 8px;
+  color: #d0bb98;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.game-page .experiment-message.error,
+.page > .experiment-message.error {
+  color: #e2a39b;
+  border-color: #e2a39b44;
+}
+.storage-hint {
+  overflow-wrap: anywhere;
+}
 .history-panel {
   padding: 10px 25px;
 }
@@ -958,6 +981,11 @@ a {
   .main-nav a {
     justify-content: center;
     padding: 14px 8px;
+    gap: 0;
+  }
+  /* 窄屏明确隐藏文字，避免中文最小字号把 font-size: 0 的文字挤成竖排。 */
+  .main-nav a .nav-text {
+    display: none;
   }
   .main-nav a span {
     font-size: 19px;

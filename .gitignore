@@ -27,3 +27,6 @@ image/
 Thumbs.db
 *.log
 logs/
+# 实验结果包含身份和私有行动，只保留在用户本机
+data/
+backend/data/

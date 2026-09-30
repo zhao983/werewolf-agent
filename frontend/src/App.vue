@@ -13,17 +13,45 @@ const store = useLabStore();
       </RouterLink>
       <div class="nav-label">实验空间</div>
       <nav class="main-nav">
-        <RouterLink to="/" exact-active-class="active"
-          ><span>◈</span> 总览</RouterLink
+        <RouterLink
+          to="/"
+          exact-active-class="active"
+          aria-label="总览"
+          title="总览"
+          ><span aria-hidden="true">◈</span
+          ><span class="nav-text">总览</span></RouterLink
         >
-        <RouterLink to="/history" active-class="active"
-          ><span>▤</span> 对局历史</RouterLink
+        <RouterLink
+          to="/history"
+          active-class="active"
+          aria-label="对局历史"
+          title="对局历史"
+          ><span aria-hidden="true">▤</span
+          ><span class="nav-text">对局历史</span></RouterLink
         >
-        <RouterLink to="/stats" active-class="active"
-          ><span>▥</span> 实验统计</RouterLink
+        <RouterLink
+          to="/experiments"
+          active-class="active"
+          aria-label="实验记录"
+          title="实验记录"
+          ><span aria-hidden="true">▥</span
+          ><span class="nav-text">实验记录</span></RouterLink
         >
-        <RouterLink to="/settings" active-class="active"
-          ><span>⚙</span> AI 设置</RouterLink
+        <RouterLink
+          to="/knowledge"
+          active-class="active"
+          aria-label="本地知识库"
+          title="本地知识库"
+          ><span aria-hidden="true">▧</span
+          ><span class="nav-text">本地知识库</span></RouterLink
+        >
+        <RouterLink
+          to="/settings"
+          active-class="active"
+          aria-label="AI 设置"
+          title="AI 设置"
+          ><span aria-hidden="true">⚙</span
+          ><span class="nav-text">AI 设置</span></RouterLink
         >
       </nav>
       <div class="sidebar-bottom">

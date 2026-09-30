@@ -61,6 +61,7 @@ export interface ObserverNote {
 export interface ObserverView {
   players: Player[];
   notes: ObserverNote[];
+  knowledge?: import("./knowledge").KnowledgeRun | null;
 }
 export const roleName: Record<Role, string> = {
   WEREWOLF: "狼人",

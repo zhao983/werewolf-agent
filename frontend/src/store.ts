@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import axios from "axios";
+import type { KnowledgeMode } from "./knowledge";
 import type {
   AdvanceCommand,
   AgentType,
@@ -25,6 +26,7 @@ export const useLabStore = defineStore("lab", {
     } as GameConfig,
     agents: Array<AgentType>(7).fill("RANDOM"),
     manual: false,
+    knowledgeMode: "NONE" as KnowledgeMode,
     llm: {
       baseUrl: "",
       apiKey: "",
@@ -66,9 +68,10 @@ export const useLabStore = defineStore("lab", {
         await this.loadObserver(id);
       } catch (error) {
         if (request !== this.viewRequest) return;
-        this.error = axios.isAxiosError(error) && error.response?.status === 403
-          ? "这场对局属于另一浏览器会话，请在创建它的页面打开。"
-          : "未找到这场对局，或后端已重启。";
+        this.error =
+          axios.isAxiosError(error) && error.response?.status === 403
+            ? "这场对局属于另一浏览器会话，请在创建它的页面打开。"
+            : "未找到这场对局，或后端已重启。";
         this.current = null;
       } finally {
         if (request === this.viewRequest) this.busy = false;
@@ -96,6 +99,7 @@ export const useLabStore = defineStore("lab", {
           seed: seed ?? null,
           llm: this.agents.includes("LLM") ? this.llm : null,
           manual: this.manual || this.agents.includes("LLM"),
+          knowledgeMode: this.knowledgeMode,
         };
         const game = (await axios.post<Game>("/api/games", body)).data;
         this.current = game;
@@ -126,6 +130,8 @@ export const useLabStore = defineStore("lab", {
         this.error = axios.isAxiosError(error)
           ? error.response?.data?.error || "推进对局失败。"
           : "推进对局失败。";
+        // 请求失败仍可能已经记录一次模型尝试，刷新用户观战数据以展示该次知识使用。
+        await this.loadObserver(id);
         return false;
       } finally {
         this.busy = false;

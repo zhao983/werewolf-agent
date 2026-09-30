@@ -19,6 +19,7 @@ public final class GameState {
     private final List<GameMessage> publicMessages = new ArrayList<>();
     private final Map<String, List<String>> privateInformation = new HashMap<>();
     private final List<ObserverNote> observerNotes = new ArrayList<>();
+    private final List<ActionRecord> actionRecords = new ArrayList<>();
     private int dayNumber = 1;
     private GamePhase phase = GamePhase.GAME_START;
     private GameResult result = GameResult.ONGOING;
@@ -55,6 +56,9 @@ public final class GameState {
     public List<GameMessage> getPublicMessages() { return List.copyOf(publicMessages); }
     public List<String> getPrivateInformation(String id) { return List.copyOf(privateInformation.getOrDefault(id, List.of())); }
     public List<ObserverNote> getObserverNotes() { return List.copyOf(observerNotes); }
+    public List<ActionRecord> getActionRecords() { return List.copyOf(actionRecords); }
+    int nextActionSequence() { return actionRecords.size() + 1; }
+    void recordAction(ActionRecord record) { actionRecords.add(record); }
     public int getDayNumber() { return dayNumber; }
     public GamePhase getPhase() { return phase; }
     public GameResult getResult() { return result; }

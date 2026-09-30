@@ -19,6 +19,13 @@ public final class OpenAiCompatibleClient implements LlmClient {
 
     @Override
     public String chat(LlmConfig config, String prompt) {
+        ChatResult result = chatWithUsage(config, prompt);
+        if (result.error() != null) throw new IllegalStateException(result.error());
+        return result.content();
+    }
+
+    @Override
+    public ChatResult chatWithUsage(LlmConfig config, String prompt) {
         try {
             String url = config.baseUrl().replaceAll("/+$", "") + "/chat/completions";
             String body = mapper.writeValueAsString(Map.of(
@@ -32,15 +39,20 @@ public final class OpenAiCompatibleClient implements LlmClient {
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300)
                 throw new IllegalStateException("Model API returned HTTP " + response.statusCode());
-            JsonNode choice = mapper.readTree(response.body()).path("choices").path(0);
+            JsonNode root = mapper.readTree(response.body());
+            JsonNode choice = root.path("choices").path(0);
             JsonNode content = choice.path("message").path("content");
+            JsonNode usage = root.path("usage");
+            String problem = null;
             // 推理模型可能耗尽输出额度而没有生成最终消息，此时给出可操作的错误原因。
             if (!content.isTextual() || content.asText().isBlank()) {
                 if ("length".equals(choice.path("finish_reason").asText()))
-                    throw new IllegalStateException("模型输出达到 Max Tokens 上限，请在 AI 设置中调高 Max Tokens");
-                throw new IllegalStateException("模型接口未返回可读取的消息内容");
+                    problem = "模型输出达到 Max Tokens 上限，请在 AI 设置中调高 Max Tokens";
+                else problem = "模型接口未返回可读取的消息内容";
             }
-            return content.asText();
+            // 空回复同样可能已经消耗 token，因此把 usage 与安全错误一起交给统计层。
+            return new ChatResult(content.isTextual() ? content.asText() : null, tokenCount(usage.path("prompt_tokens")),
+                    tokenCount(usage.path("completion_tokens")), tokenCount(usage.path("total_tokens")), problem);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Model request interrupted", e);
@@ -48,5 +60,11 @@ public final class OpenAiCompatibleClient implements LlmClient {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("Model request failed: " + e.getClass().getSimpleName(), e);
         }
+    }
+
+    /** 兼容接口可能没有 usage；缺失和非法数值不作为零消耗处理。 */
+    private Long tokenCount(JsonNode node) {
+        return node.isIntegralNumber() && node.canConvertToLong() && node.longValue() >= 0
+                ? node.longValue() : null;
     }
 }

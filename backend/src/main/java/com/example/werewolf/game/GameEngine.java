@@ -236,8 +236,23 @@ public final class GameEngine {
                     state.getDayNumber(), alive(state).stream().map(Player::getId).toList(),
                     state.getPublicMessages(), state.getPrivateInformation(actor.getId()), actions, targets,
                     attack, state.getConfig());
-            AgentResponse response = actor.getAgent().act(context);
-            ActionValidator.validate(context, response);
+            AgentResponse response = null;
+            long started = System.nanoTime();
+            String status = "ERROR";
+            try {
+                response = actor.getAgent().act(context);
+                status = "INVALID";
+                ActionValidator.validate(context, response);
+                status = "VALID";
+            } finally {
+                // 失败尝试同样记录，但不推进玩家索引；用户重试仍是同一个合法行动位置。
+                String target = response == null ? null : response.targetPlayerId();
+                if (target != null && target.length() > 80) target = target.substring(0, 80);
+                state.recordAction(new ActionRecord(state.nextActionSequence(),
+                        state.getDayNumber(), state.getPhase(), actor.getId(),
+                        response == null ? null : response.action(), target, status,
+                        Math.round((System.nanoTime() - started) / 1_000.0) / 1_000.0, actor.getAgent().lastMetrics()));
+            }
             // 决策说明与私密行动仅进入观战记录，不能进入公共发言或其他 Agent 的输入。
             String choice = response.action() + (response.targetPlayerId() == null ? "" : " → " + response.targetPlayerId());
             String reason = response.reasoning() == null ? "" : response.reasoning().strip();

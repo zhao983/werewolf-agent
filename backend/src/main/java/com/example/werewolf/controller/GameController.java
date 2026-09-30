@@ -3,6 +3,9 @@ package com.example.werewolf.controller;
 import com.example.werewolf.service.GameService;
 import com.example.werewolf.service.GameService.*;
 import com.example.werewolf.game.AdvanceCommand;
+import com.example.werewolf.experiment.ExperimentAccess;
+import com.example.werewolf.experiment.ExperimentService;
+import java.io.UncheckedIOException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -19,8 +22,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class GameController {
     private static final String OWNER_PREFIX = "game-owner:";
     private final GameService service;
+    private final ExperimentService experiments;
+    private final ExperimentAccess access;
 
-    public GameController(GameService service) { this.service = service; }
+    public GameController(GameService service, ExperimentService experiments, ExperimentAccess access) {
+        this.service = service; this.experiments = experiments; this.access = access;
+    }
 
     @GetMapping
     public List<GameSummary> list(HttpServletRequest request) {
@@ -45,18 +52,28 @@ public class GameController {
     }
 
     @PostMapping
-    public GameView create(@RequestBody CreateGameRequest request, HttpSession session) {
+    public GameView create(@RequestBody CreateGameRequest request, HttpSession session,
+                           HttpServletRequest servletRequest, HttpServletResponse response) {
+        String owner = access.getOrCreate(servletRequest, response);
         GameView game = service.create(request);
         session.setAttribute(OWNER_PREFIX + game.summary().gameId(), Boolean.TRUE);
+        record(owner, game.summary().gameId());
         return game;
     }
 
     /** 一次请求只推进一个玩家行动或一个阶段边界，供手动 AI 对局使用。 */
     @PostMapping("/{id}/advance")
     public GameView advance(@PathVariable String id, @RequestBody AdvanceRequest request,
-                            HttpServletRequest servletRequest) {
+                            HttpServletRequest servletRequest, HttpServletResponse response) {
         requireOwner(id, servletRequest);
-        return service.advance(id, request.command());
+        String owner = access.getOrCreate(servletRequest, response);
+        try { return service.advance(id, request.command()); }
+        finally { record(owner, id); }
+    }
+
+    private void record(String owner, String id) {
+        var data = service.snapshot(id);
+        experiments.recordGame(owner, data.config(), data.agentTypes(), data.game());
     }
 
     private boolean owns(HttpSession session, String id) {
@@ -82,4 +99,8 @@ public class GameController {
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
     public Map<String, String> modelError(IllegalStateException ex) { return Map.of("error", ex.getMessage()); }
+
+    @ExceptionHandler(UncheckedIOException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public Map<String, String> storageError() { return Map.of("error", "对局状态已更新，但实验记录未能保存，请检查磁盘空间后刷新页面"); }
 }

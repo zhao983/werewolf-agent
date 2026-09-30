@@ -199,6 +199,22 @@ async function start() {
             >配置模型参数 →</RouterLink
           >
         </div>
+        <div v-if="hasLlm" class="knowledge-setup">
+          <label
+            >AI 策略知识
+            <select v-model="store.knowledgeMode" aria-label="AI 策略知识模式">
+              <option value="NONE">关闭策略知识（基线）</option>
+              <option value="COMMON">仅通用知识</option>
+              <option value="ROLE">通用 + 对应角色知识</option>
+            </select>
+          </label>
+          <RouterLink to="/knowledge" class="small-link"
+            >管理本地知识库 →</RouterLink
+          >
+          <p class="muted">
+            每场对局固定开局时的知识版本，Agent 只读取自己角色的建议。
+          </p>
+        </div>
       </div>
       <div class="right-stack">
         <div class="panel rule-panel">
@@ -208,9 +224,7 @@ async function start() {
             <span>阵营配置</span
             ><strong
               >{{ store.config.werewolves }} 狼人 ·
-              {{
-                store.config.playerCount - store.config.werewolves
-              }}
+              {{ store.config.playerCount - store.config.werewolves }}
               好人</strong
             >
           </div>
@@ -276,3 +290,31 @@ async function start() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.knowledge-setup {
+  border-top: 1px solid #ffffff15;
+  margin-top: 18px;
+  padding-top: 16px;
+  font-size: 12px;
+}
+.knowledge-setup label {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 12px 8px 0;
+}
+.knowledge-setup select {
+  background: #202a34;
+  border: 1px solid #ffffff25;
+  color: #eeeae1;
+  padding: 8px;
+  border-radius: 5px;
+  max-width: 100%;
+}
+.knowledge-setup p {
+  font-size: 11px;
+  line-height: 1.7;
+}
+</style>
