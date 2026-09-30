@@ -1,0 +1,29 @@
+# 构建结果与本地依赖
+backend/target/
+backend/.mvn/.m2/
+backend/.mvn/repository/
+frontend/node_modules/
+frontend/dist/
+# 原始素材已复制到前端 public，避免重复提交大文件
+image/
+
+# 本地配置与密钥（保留示例文件）
+.env
+.env.*
+!.env.example
+!.env.*.example
+**/application-local.properties
+**/application-*.local.properties
+*.pem
+*.key
+*.p12
+*.jks
+
+# IDE、系统和日志
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log
+logs/
