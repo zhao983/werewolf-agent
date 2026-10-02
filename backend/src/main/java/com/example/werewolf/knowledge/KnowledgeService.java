@@ -118,11 +118,11 @@ public class KnowledgeService {
         return List.of(
                 example("区分事实与身份声明", Scope.COMMON, day, "玩家公开声明的身份和查验结果属于待验证信息。结合历次发言、矛盾与投票关系判断，不能把猜测当作事实。"),
                 example("根据合法信息选择袭击目标", Scope.WEREWOLF, List.of(GamePhase.NIGHT_WEREWOLF), "结合公开发言选择可能提供有效信息的对手，参考自己已知的狼队友信息；不要臆造其他玩家的真实身份。"),
-                example("维护有依据的公开立场", Scope.WEREWOLF, day, "保持发言与之前公开立场连贯，结合票型考虑阵营利益。仅在 SPEAK 时输出公开发言，私有策略和队友信息不要自动照抄到发言。"),
+                example("维护有依据的公开立场", Scope.WEREWOLF, day, "保持发言与之前公开立场连贯，结合票型考虑阵营利益。公开发言时注意隐藏自己的私有策略和队友信息，不要无意中泄露狼队线索。"),
                 example("综合公开证据投票", Scope.VILLAGER, day, "优先分析前后矛盾、身份声明与投票理由。比较不同玩家的证据，给出明确但保留不确定性的判断。"),
                 example("扩大查验的信息收益", Scope.SEER, List.of(GamePhase.NIGHT_SEER), "在合法目标中优先考虑未查验且争议较大的存活玩家。仅将自己实际收到的查验结果作为确定阵营信息。"),
                 example("有条件地公开查验结果", Scope.SEER, day, "结合局势、存活人数与实际查验结果决定何时公布身份或查验信息。不要将好人阵营结果描述为具体神职身份。"),
-                example("谨慎使用有限药剂", Scope.WITCH, List.of(GamePhase.NIGHT_WITCH), "只从本夜 availableActions 和 legalTargets 中选择。根据实际夜间信息和公开证据权衡救人与用毒，证据不足时可以保留药剂并 PASS。")
+                example("谨慎使用有限药剂", Scope.WITCH, List.of(GamePhase.NIGHT_WITCH), "根据本夜剩余药剂以及实际可救、可毒的对象，结合夜间信息和公开证据权衡救人与用毒；证据不足时可以保留药剂，本夜不用药。")
         );
     }
     private static Entry example(String title, Scope scope, List<GamePhase> phases, String content) {

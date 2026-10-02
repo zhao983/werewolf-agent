@@ -17,6 +17,10 @@ export interface LlmConfig {
   model: string;
   temperature: number;
   maxTokens: number;
+  /** 创建对局时冻结决策模式；不支持工具的兼容服务继续使用 JSON。 */
+  decisionMode: "JSON" | "TOOLS" | "TOOLS_STRICT";
+  requestTimeoutSeconds: number;
+  tokenLimitParameter: "MAX_TOKENS" | "MAX_COMPLETION_TOKENS";
 }
 export interface GameSummary {
   gameId: string;
@@ -59,6 +63,7 @@ export interface ObserverNote {
   text: string;
 }
 export interface ObserverView {
+  actions?: import("./experiments").ExperimentAction[];
   players: Player[];
   notes: ObserverNote[];
   knowledge?: import("./knowledge").KnowledgeRun | null;

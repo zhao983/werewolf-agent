@@ -144,7 +144,7 @@ public class GameService {
             GameState state = session.getState();
             List<PlayerView> players = state.getPlayers().stream().map(p ->
                     new PlayerView(p.getId(), p.getName(), p.getRole(), p.getStatus())).toList();
-            return new ObserverView(players, state.getObserverNotes(), knowledgeRun(run));
+            return new ObserverView(players, state.getObserverNotes(), knowledgeRun(run), state.getActionRecords());
         }
     }
 
@@ -225,5 +225,5 @@ public class GameService {
     public record GameView(GameSummary summary, GameConfig config, List<PlayerView> players,
                            List<GameEvent> events, boolean manual,
                            AdvanceCommand nextCommand, String nextActorId) { }
-    public record ObserverView(List<PlayerView> players, List<ObserverNote> notes, Run knowledge) { }
+    public record ObserverView(List<PlayerView> players, List<ObserverNote> notes, Run knowledge, List<com.example.werewolf.game.ActionRecord> actions) { }
 }

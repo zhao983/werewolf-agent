@@ -338,6 +338,7 @@ onBeforeUnmount(() => {
             :cursor="cursor"
             :notice="observerNotice"
             :knowledge="game.knowledge"
+            :actions="game.actions"
             :event-count="events.length"
           />
           <section class="panel timeline-panel">

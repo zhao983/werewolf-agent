@@ -235,7 +235,15 @@ public final class GameEngine {
             AgentContext context = new AgentContext(actor.getId(), actor.getRole(), state.getPhase(),
                     state.getDayNumber(), alive(state).stream().map(Player::getId).toList(),
                     state.getPublicMessages(), state.getPrivateInformation(actor.getId()), actions, targets,
-                    attack, state.getConfig());
+                    attack, state.getConfig(),
+                    state.getPlayers().stream().filter(p -> !p.isAlive()).map(Player::getId).toList(),
+                    // 只选公开事实：禁止把身份分配、查验、狼刀、用药和观战记录混入共享上下文。
+                    state.getEvents().stream().filter(e -> Set.of("DAY_ANNOUNCEMENT", "PLAYER_DIED", "PLAYER_EXILED", "VOTE")
+                            .contains(e.type())).toList(),
+                    state.getActionRecords().stream().filter(a -> a.playerId().equals(actor.getId()) && a.status().equals("VALID"))
+                            .map(a -> new com.example.werewolf.agent.PersonalAction(a.day(), a.phase(), a.action(), a.targetPlayerId())).toList(),
+                    actor.getRole() == Role.WITCH ? state.isAntidoteAvailable(actor.getId()) : null,
+                    actor.getRole() == Role.WITCH ? state.isPoisonAvailable(actor.getId()) : null);
             AgentResponse response = null;
             long started = System.nanoTime();
             String status = "ERROR";
@@ -251,7 +259,8 @@ public final class GameEngine {
                 state.recordAction(new ActionRecord(state.nextActionSequence(),
                         state.getDayNumber(), state.getPhase(), actor.getId(),
                         response == null ? null : response.action(), target, status,
-                        Math.round((System.nanoTime() - started) / 1_000.0) / 1_000.0, actor.getAgent().lastMetrics()));
+                        Math.round((System.nanoTime() - started) / 1_000.0) / 1_000.0, actor.getAgent().lastMetrics(),
+                        actor.getAgent().lastDiagnostics()));
             }
             // 决策说明与私密行动仅进入观战记录，不能进入公共发言或其他 Agent 的输入。
             String choice = response.action() + (response.targetPlayerId() == null ? "" : " → " + response.targetPlayerId());

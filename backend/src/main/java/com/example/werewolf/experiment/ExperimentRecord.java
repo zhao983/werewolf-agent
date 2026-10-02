@@ -1,6 +1,7 @@
 package com.example.werewolf.experiment;
 
 import com.example.werewolf.ai.LlmConfig;
+import com.example.werewolf.ai.DecisionMode;
 import com.example.werewolf.game.*;
 import com.example.werewolf.player.PlayerStatus;
 import com.example.werewolf.player.Role;
@@ -13,7 +14,7 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
                                String source, String status, String createdAt, String updatedAt,
                                GameConfig config, List<String> agentTypes, long startSeed,
                                int requestedGames, List<GameSnapshot> games, String errorCode, String group, String notes) {
-    public static final String ENGINE_VERSION = "0.2.0-experiment-v1";
+    public static final String ENGINE_VERSION = "0.3.0-context-diagnostics-v1";
     public ExperimentRecord {
         agentTypes = List.copyOf(agentTypes);
         games = List.copyOf(games);
@@ -29,9 +30,21 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
     }
 
     /** 模型配置只保留可比较参数；API Key 与服务地址不进入记录。 */
-    public record ModelSpec(String model, double temperature, int maxTokens) {
+    public record ModelSpec(String model, double temperature, int maxTokens, DecisionMode decisionMode,
+                            Integer requestTimeoutSeconds, com.example.werewolf.ai.TokenLimitParameter tokenLimitParameter) {
+        public ModelSpec {
+            decisionMode = decisionMode == null ? DecisionMode.JSON : decisionMode;
+            requestTimeoutSeconds = requestTimeoutSeconds == null ? 45 : requestTimeoutSeconds;
+            tokenLimitParameter = tokenLimitParameter == null ? com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS : tokenLimitParameter;
+        }
+        public ModelSpec(String model, double temperature, int maxTokens, DecisionMode decisionMode) {
+            this(model, temperature, maxTokens, decisionMode, 45, com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS);
+        }
+        /** 旧存档与旧调用在新增工具模式之前均为 JSON 决策。 */
+        public ModelSpec(String model, double temperature, int maxTokens) { this(model, temperature, maxTokens, DecisionMode.JSON); }
         public static ModelSpec of(LlmConfig config) {
-            return config == null ? null : new ModelSpec(config.model(), config.temperature(), config.maxTokens());
+            return config == null ? null : new ModelSpec(config.model(), config.temperature(), config.maxTokens(), config.decisionMode(),
+                    config.requestTimeoutSeconds(), config.tokenLimitParameter());
         }
     }
     public record Seat(String playerId, Role role, String agentType, PlayerStatus status) { }

@@ -85,6 +85,7 @@ public final class ExperimentImport {
                 text(g.model().model(), 300);
                 require(Double.isFinite(g.model().temperature()) && g.model().temperature() >= 0 && g.model().temperature() <= 2
                         && g.model().maxTokens() >= 1 && g.model().maxTokens() <= 100_000, "模型比较参数无效");
+                require(g.model().requestTimeoutSeconds() >= 10 && g.model().requestTimeoutSeconds() <= 180, "模型超时参数无效");
             }
             entries += g.actions().size() + (long) g.events().size() + (g.observerNotes() == null ? 0 : g.observerNotes().size());
             require(entries <= 200_000, "行动和事件数量过多");
@@ -96,6 +97,16 @@ public final class ExperimentImport {
                 require(!a.status().equals("VALID") || a.action() != null, "合法行动缺少动作类型");
                 if (a.targetPlayerId() != null) text(a.targetPlayerId(), 100);
                 metrics(a.metrics());
+                // 老记录没有诊断；新诊断只允许本地识别的枚举、合理数值和顺序，不执行导入内容。
+                require(a.diagnostics().size() <= 2, "模型诊断数量无效");
+                int attempt = 0;
+                for (var d : a.diagnostics()) {
+                    require(d != null && d.code() != null && d.attempt() == ++attempt
+                            && (d.httpStatus() == null || d.httpStatus() >= 100 && d.httpStatus() <= 599)
+                            && (d.toolCallCount() == null || d.toolCallCount() >= 0 && d.toolCallCount() <= 1000), "模型诊断字段无效");
+                    number(d.requestMillis());
+                }
+                require(a.diagnostics().isEmpty() || a.diagnostics().size() == a.metrics().apiCalls(), "模型诊断与请求次数不一致");
             }
             for (var e : g.events()) {
                 require(e != null && e.day() >= 1 && e.day() <= g.days() && e.phase() != null, "回放事件无效");

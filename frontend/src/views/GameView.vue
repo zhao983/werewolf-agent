@@ -18,10 +18,14 @@ const route = useRoute();
 const router = useRouter();
 const cursor = ref(0);
 const playing = ref(false);
+const autoAdvancing = ref(false);
+const autoNotice = ref("");
 const reveal = ref(false);
 const hoveredPlayerId = ref<string | null>(null);
 const selectedPlayerId = ref("all");
 let timer: ReturnType<typeof setInterval> | undefined;
+let autoTimer: ReturnType<typeof setTimeout> | undefined;
+let autoRun = 0;
 const game = computed(() => store.current);
 const observer = computed(() => store.observer);
 const events = computed(() => game.value?.events ?? []);
@@ -130,12 +134,68 @@ function toggle() {
   }, 750);
 }
 async function advance(command: AdvanceCommand) {
-  if (!game.value || store.busy) return;
-  const ok = await store.advanceGame(game.value.summary.gameId, command);
-  if (ok) {
+  if (!game.value || store.busy) return false;
+  const id = game.value.summary.gameId;
+  const ok = await store.advanceGame(id, command);
+  if (ok && route.params.id === id && game.value?.summary.gameId === id) {
     stop();
     cursor.value = (store.current?.events.length ?? 1) - 1;
   }
+  return ok;
+}
+/** 暂停只取消下一步调度；已发出的模型请求仍由后端完成，避免重复执行同一行动。 */
+function stopAutoAdvance() {
+  autoAdvancing.value = false;
+  autoRun++;
+  if (autoTimer) clearTimeout(autoTimer);
+  autoTimer = undefined;
+}
+async function autoStep(run: number, id: string) {
+  if (
+    !autoAdvancing.value ||
+    run !== autoRun ||
+    route.params.id !== id ||
+    game.value?.summary.gameId !== id
+  )
+    return;
+  const command = game.value.nextCommand;
+  if (!live.value || command === "NONE" || store.busy) {
+    stopAutoAdvance();
+    return;
+  }
+  // 必须等待整次行动及观战数据刷新完成，不能用固定间隔并发请求多个 Agent。
+  const ok = await advance(command);
+  if (run !== autoRun || !autoAdvancing.value) return;
+  if (!ok || !live.value) {
+    stopAutoAdvance();
+    autoNotice.value = ok
+      ? "对局已结束，自动推进已停止。"
+      : "推进失败，自动推进已暂停，请查看错误后手动重试。";
+    return;
+  }
+  autoTimer = setTimeout(() => {
+    void autoStep(run, id);
+  }, 1000);
+}
+function toggleAutoAdvance() {
+  if (autoAdvancing.value) {
+    stopAutoAdvance();
+    autoNotice.value = store.busy
+      ? "已暂停自动推进；当前已发出的行动会完成，随后不再继续。"
+      : "已暂停自动推进，可继续手动操作。";
+    return;
+  }
+  if (
+    !live.value ||
+    store.busy ||
+    !game.value ||
+    game.value.nextCommand === "NONE"
+  )
+    return;
+  autoNotice.value = "";
+  autoAdvancing.value = true;
+  const run = ++autoRun;
+  void autoStep(run, game.value.summary.gameId);
 }
 function resetCursor() {
   cursor.value = live.value ? Math.max(0, events.value.length - 1) : 0;
@@ -163,6 +223,8 @@ watch(
   () => route.params.id,
   async (id) => {
     stop();
+    stopAutoAdvance();
+    autoNotice.value = "";
     reveal.value = false;
     hoveredPlayerId.value = null;
     selectedPlayerId.value = "all";
@@ -177,7 +239,10 @@ onMounted(async () => {
   await loadOrReplay(id);
   if (route.params.id === id) resetCursor();
 });
-onBeforeUnmount(stop);
+onBeforeUnmount(() => {
+  stop();
+  stopAutoAdvance();
+});
 </script>
 
 <template>
@@ -198,7 +263,7 @@ onBeforeUnmount(stop);
         <p>
           {{
             live
-              ? "每次点击只推进一名 Agent 或一个阶段。"
+              ? "可逐步操作，或开启自动推进后随时暂停。"
               : "沿时间线查看每一步行动与局势变化。"
           }}
         </p>
@@ -235,7 +300,8 @@ onBeforeUnmount(stop);
 
     <div v-if="live" class="manual-progress">
       <span class="section-index"
-        >MANUAL CONTROL / 第 {{ game.summary.days }} 天</span
+        >{{ autoAdvancing ? "AUTO CONTROL" : "MANUAL CONTROL" }} / 第
+        {{ game.summary.days }} 天</span
       >
       <strong>{{ phaseName[game.summary.phase] ?? game.summary.phase }}</strong>
       <p v-if="game.nextCommand === 'NEXT_ACTION'">
@@ -243,33 +309,63 @@ onBeforeUnmount(stop);
           game.nextActorId
             ? `等待 ${game.nextActorId} 行动。`
             : "等待本阶段下一名特殊身份玩家行动。"
-        }}点击一次只调用这一名 Agent。
+        }}{{
+          autoAdvancing
+            ? "自动模式将依次调用本阶段的 Agent。"
+            : "点击一次只调用这一名 Agent。"
+        }}
       </p>
-      <p v-else>本阶段玩家行动已完成，请确认进入下一阶段。</p>
-      <button
-        v-if="game.nextCommand === 'NEXT_ACTION'"
-        class="primary-button"
-        :disabled="store.busy"
-        @click="advance('NEXT_ACTION')"
-      >
-        {{ store.busy ? "正在等待 Agent…" : actionLabel }} →
-      </button>
-      <button
-        v-else-if="game.nextCommand === 'COMPLETE_PHASE'"
-        class="primary-button"
-        :disabled="store.busy"
-        @click="advance('COMPLETE_PHASE')"
-      >
-        完成当前阶段 →
-      </button>
-      <button
-        v-else-if="game.nextCommand === 'END_DAY'"
-        class="primary-button"
-        :disabled="store.busy"
-        @click="advance('END_DAY')"
-      >
-        结束白天并进入下一轮 →
-      </button>
+      <p v-else>
+        {{
+          autoAdvancing
+            ? "本阶段行动已完成，将自动进入下一阶段。"
+            : "本阶段玩家行动已完成，请确认进入下一阶段。"
+        }}
+      </p>
+      <div class="progress-actions">
+        <button
+          v-if="game.nextCommand === 'NEXT_ACTION'"
+          class="primary-button"
+          :disabled="store.busy || autoAdvancing"
+          @click="advance('NEXT_ACTION')"
+        >
+          {{ store.busy ? "正在等待 Agent…" : actionLabel }} →
+        </button>
+        <button
+          v-else-if="game.nextCommand === 'COMPLETE_PHASE'"
+          class="primary-button"
+          :disabled="store.busy || autoAdvancing"
+          @click="advance('COMPLETE_PHASE')"
+        >
+          完成当前阶段 →
+        </button>
+        <button
+          v-else-if="game.nextCommand === 'END_DAY'"
+          class="primary-button"
+          :disabled="store.busy || autoAdvancing"
+          @click="advance('END_DAY')"
+        >
+          结束白天并进入下一轮 →
+        </button>
+        <button
+          class="subtle-button"
+          :aria-pressed="autoAdvancing"
+          :disabled="
+            !autoAdvancing && (store.busy || game.nextCommand === 'NONE')
+          "
+          @click="toggleAutoAdvance"
+        >
+          {{ autoAdvancing ? "暂停自动推进" : "自动推进" }}
+        </button>
+      </div>
+      <p class="muted" aria-live="polite">
+        {{
+          autoNotice ||
+          (autoAdvancing
+            ? "自动推进中：每步完成后等待 1 秒继续，遇到错误或对局结束时停止。"
+            : "自动推进会依次完成玩家行动、阶段结算和进入下一轮；离开本页时停止。")
+        }}
+      </p>
     </div>
 
     <div class="replay-layout">
@@ -346,6 +442,7 @@ onBeforeUnmount(stop);
           :cursor="cursor"
           :live="live"
           :knowledge="observer?.knowledge"
+          :actions="observer?.actions"
           :event-count="events.length"
         />
         <div v-if="!live" class="panel timeline-panel">
@@ -435,3 +532,20 @@ onBeforeUnmount(stop);
     <RouterLink to="/">返回首页</RouterLink>
   </div>
 </template>
+
+<style scoped>
+.progress-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.progress-actions .primary-button {
+  margin-top: 0;
+}
+.progress-actions button[aria-pressed="true"] {
+  border-color: #c9a863;
+  color: #e2c789;
+}
+</style>

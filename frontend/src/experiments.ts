@@ -19,6 +19,7 @@ export interface AgentMetrics {
   requestMillis: number;
 }
 export interface ExperimentAction {
+  diagnostics?: DecisionDiagnostic[];
   sequence: number;
   day: number;
   phase: string;
@@ -38,13 +39,43 @@ export interface ExperimentGame {
   result: GameResult;
   days: number;
   elapsedMillis: number | null;
-  model: { model: string; temperature: number; maxTokens: number } | null;
+  model: {
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    decisionMode?: "JSON" | "TOOLS" | "TOOLS_STRICT";
+    requestTimeoutSeconds?: number;
+    tokenLimitParameter?: "MAX_TOKENS" | "MAX_COMPLETION_TOKENS";
+  } | null;
   seats: { playerId: string; role: Role; agentType: string; status: string }[];
   actions: ExperimentAction[];
   events: GameEvent[];
   observerNotes?: ObserverNote[] | null;
   knowledge?: import("./knowledge").KnowledgeRun | null;
 }
+/** 安全诊断只含分类及数值，不包含模型原始输出或密钥。 */
+export interface DecisionDiagnostic {
+  attempt: number;
+  code: string;
+  httpStatus: number | null;
+  finishReason: string | null;
+  toolCallCount: number | null;
+  outputExceededLimit: boolean;
+  requestMillis: number;
+}
+export const diagnosticName: Record<string, string> = {
+  SUCCESS: "通过",
+  TIMEOUT: "请求超时",
+  HTTP_ERROR: "接口拒绝",
+  NETWORK_ERROR: "连接失败",
+  RESPONSE_ERROR: "接口响应格式错误",
+  INTERRUPTED: "请求中断",
+  TOKEN_LIMIT: "输出截断",
+  EMPTY_CONTENT: "没有最终回复",
+  INVALID_ACTION: "格式或动作错误",
+  INCONSISTENT_ACTION: "文字与游戏事实不一致",
+  CLIENT_ERROR: "客户端异常",
+};
 export interface ExperimentSummary {
   completedGames: number;
   failedGames: number;

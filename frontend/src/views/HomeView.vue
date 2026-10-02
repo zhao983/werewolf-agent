@@ -7,7 +7,7 @@ import ExperimentLabelFields from "../components/ExperimentLabelFields.vue";
 
 const store = useLabStore();
 const router = useRouter();
-const seedText = ref("");
+const seedText = ref<string | number>("");
 const hasLlm = computed(() => store.agents.includes("LLM"));
 const roleSum = computed(
   () =>
@@ -59,8 +59,9 @@ async function start() {
       "请检查玩家总数与身份数量：总和必须相等，且开局好人多于狼人。";
     return;
   }
-  const seed =
-    seedText.value.trim() === "" ? undefined : Number(seedText.value);
+  // type=number 的 v-model 会自动转数字；统一转为文本后才能处理空值与固定种子。
+  const rawSeed = String(seedText.value).trim();
+  const seed = rawSeed === "" ? undefined : Number(rawSeed);
   if (seed !== undefined && !Number.isSafeInteger(seed)) {
     store.error = "随机种子必须是整数。";
     return;

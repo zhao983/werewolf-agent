@@ -15,7 +15,7 @@ public final class ExperimentCsv {
                 "status", "result", "days", "elapsed_ms", "action_attempts", "valid_actions", "invalid_actions",
                 "failed_actions", "invalid_replies", "api_calls", "api_failures", "usage_reported_calls",
                 "prompt_tokens_reported", "completion_tokens_reported", "total_tokens_reported", "decision_ms", "request_ms",
-                "experiment_group", "experiment_notes", "knowledge_mode", "knowledge_revision");
+                "experiment_group", "experiment_notes", "knowledge_mode", "knowledge_revision", "decision_mode", "request_timeout_seconds", "token_limit_parameter");
         for (GameSnapshot game : record.games()) {
             Summary s = Summary.of(java.util.List.of(game));
             var c = record.config();
@@ -32,7 +32,9 @@ public final class ExperimentCsv {
                     s.usageReportedCalls() == 0 ? null : s.promptTokens(),
                     s.usageReportedCalls() == 0 ? null : s.completionTokens(),
                     s.usageReportedCalls() == 0 ? null : s.totalTokens(), s.decisionMillis(), s.requestMillis(),
-                    record.group(), record.notes(), ExperimentAnalysis.knowledgeMode(game), ExperimentAnalysis.knowledgeRevision(game));
+                    record.group(), record.notes(), ExperimentAnalysis.knowledgeMode(game), ExperimentAnalysis.knowledgeRevision(game),
+                    game.model() == null ? null : game.model().decisionMode(), game.model() == null ? null : game.model().requestTimeoutSeconds(),
+                    game.model() == null ? null : game.model().tokenLimitParameter());
         }
         return out.toString();
     }
@@ -40,14 +42,14 @@ public final class ExperimentCsv {
         StringBuilder out = new StringBuilder("\uFEFF");
         row(out, "experiment_id", "game_id", "seed", "sequence", "day", "phase", "player_id", "role",
                 "agent_type", "action", "target_player_id", "status", "decision_ms", "api_calls", "api_failures",
-                "invalid_replies", "usage_reported_calls", "total_tokens_reported", "request_ms");
+                "invalid_replies", "usage_reported_calls", "total_tokens_reported", "request_ms", "diagnostics");
         for (GameSnapshot game : record.games()) for (var action : game.actions()) {
             Seat seat = game.seats().stream().filter(p -> p.playerId().equals(action.playerId())).findFirst().orElseThrow();
             var m = action.metrics();
             row(out, record.id(), game.gameId(), game.seed(), action.sequence(), action.day(), action.phase(),
                     action.playerId(), seat.role(), seat.agentType(), action.action(), action.targetPlayerId(),
                     action.status(), action.decisionMillis(), m.apiCalls(), m.apiFailures(), m.invalidReplies(),
-                    m.usageReportedCalls(), m.usageReportedCalls() == 0 ? null : m.totalTokens(), m.requestMillis());
+                    m.usageReportedCalls(), m.usageReportedCalls() == 0 ? null : m.totalTokens(), m.requestMillis(), json(action.diagnostics()));
         }
         return out.toString();
     }

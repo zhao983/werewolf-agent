@@ -12,6 +12,7 @@ import {
 import { roleName, phaseName } from "../types";
 import ExperimentLabelFields from "../components/ExperimentLabelFields.vue";
 import AnalysisFilters from "../components/AnalysisFilters.vue";
+import DiagnosticDetails from "../components/DiagnosticDetails.vue";
 import {
   configKey,
   emptyFilter,
@@ -905,9 +906,21 @@ onBeforeUnmount(() => {
         <p v-if="chosenGame.model" class="muted">
           模型 {{ chosenGame.model.model }} · temperature
           {{ chosenGame.model.temperature }} · maxTokens
+          {{ chosenGame.model.maxTokens }} · 决策方式
           {{
-            chosenGame.model.maxTokens
-          }}。模型对局的种子只控制引擎随机过程，不保证外部模型输出可复现。
+            chosenGame.model.decisionMode === "TOOLS_STRICT"
+              ? "工具调用（严格参数）"
+              : chosenGame.model.decisionMode === "TOOLS"
+                ? "工具调用"
+                : "JSON 回复"
+          }}
+          · 超时 {{ chosenGame.model.requestTimeoutSeconds ?? 45 }} 秒 ·
+          额度参数
+          {{
+            chosenGame.model.tokenLimitParameter === "MAX_COMPLETION_TOKENS"
+              ? "max_completion_tokens"
+              : "max_tokens"
+          }}。 模型对局的种子只控制引擎随机过程，不保证外部模型输出可复现。
         </p>
         <div class="experiment-table-wrap">
           <table class="experiment-table">
@@ -923,6 +936,7 @@ onBeforeUnmount(() => {
                 <th>结果</th>
                 <th>决策耗时</th>
                 <th>API / 非法回复</th>
+                <th>请求诊断</th>
               </tr>
             </thead>
             <tbody>
@@ -956,6 +970,12 @@ onBeforeUnmount(() => {
                 <td>
                   {{ action.metrics.apiCalls }} /
                   {{ action.metrics.invalidReplies }}
+                </td>
+                <td>
+                  <DiagnosticDetails
+                    v-if="action.metrics.apiCalls"
+                    :diagnostics="action.diagnostics"
+                  /><span v-else>—</span>
                 </td>
               </tr>
             </tbody>

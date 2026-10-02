@@ -14,6 +14,30 @@ class ExperimentMetadataTest {
     @TempDir Path directory;
     ObjectMapper mapper = new ObjectMapper();
     String owner = "9b27f71f-fdc0-4b9c-8913-14226143fc68";
+    @Test void toolModeSurvivesExportImportAndLegacyModeIsJson() throws Exception {
+        var games = new GameService(mapper);
+        var llm = new com.example.werewolf.ai.LlmConfig("http://127.0.0.1:12345/v1", "private-test-key", "mock", .7, 1000,
+                com.example.werewolf.ai.DecisionMode.TOOLS_STRICT, 120, com.example.werewolf.ai.TokenLimitParameter.MAX_COMPLETION_TOKENS);
+        var game = games.create(new GameService.CreateGameRequest(GameConfig.classicSeven(), Collections.nCopies(7, "LLM"), 42L, llm, false));
+        var data = games.snapshot(game.summary().gameId());
+        var service = new ExperimentService(mapper, directory.toString());
+        try {
+            service.recordGame(owner, data.config(), data.agentTypes(), data.game());
+            var view = service.get(owner, game.summary().gameId());
+            byte[] json = mapper.writeValueAsBytes(view);
+            assertFalse(new String(json, java.nio.charset.StandardCharsets.UTF_8).contains("private-test-key"));
+            var parsed = ExperimentImport.parse(mapper, json);
+            assertEquals(com.example.werewolf.ai.DecisionMode.TOOLS_STRICT, parsed.games().getFirst().model().decisionMode());
+            assertEquals(120, parsed.games().getFirst().model().requestTimeoutSeconds());
+            assertEquals(com.example.werewolf.ai.TokenLimitParameter.MAX_COMPLETION_TOKENS, parsed.games().getFirst().model().tokenLimitParameter());
+            assertTrue(ExperimentCsv.games(parsed).contains("TOOLS_STRICT"));
+            var legacy = mapper.valueToTree(view);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) legacy.path("record").path("games").get(0).path("model")).remove(List.of("decisionMode", "requestTimeoutSeconds", "tokenLimitParameter"));
+            assertEquals(com.example.werewolf.ai.DecisionMode.JSON,
+                    ExperimentImport.parse(mapper, mapper.writeValueAsBytes(legacy)).games().getFirst().model().decisionMode());
+            assertEquals(45, ExperimentImport.parse(mapper, mapper.writeValueAsBytes(legacy)).games().getFirst().model().requestTimeoutSeconds());
+        } finally { service.close(); }
+    }
     @Test void labelsSurviveAdvanceRestartAndImport() throws Exception {
         var games = new GameService(mapper);
         var game = games.create(new GameService.CreateGameRequest(GameConfig.classicSeven(), null, 42L, null, true));

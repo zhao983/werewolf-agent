@@ -844,7 +844,8 @@ a {
   font-size: 11px;
   margin: 19px 0;
 }
-.settings-panel input {
+.settings-panel input,
+.settings-panel select {
   display: block;
   width: 100%;
   margin-top: 8px;
@@ -856,8 +857,13 @@ a {
   font-size: 12px;
   outline: none;
 }
-.settings-panel input:focus {
+.settings-panel input:focus,
+.settings-panel select:focus {
   border-color: #c1a369;
+}
+.settings-panel > p {
+  font-size: 12px;
+  line-height: 1.9;
 }
 .settings-double {
   display: grid;

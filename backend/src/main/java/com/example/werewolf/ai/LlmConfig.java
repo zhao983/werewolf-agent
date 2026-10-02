@@ -1,8 +1,22 @@
 package com.example.werewolf.ai;
 
 /** 单次模型连接参数；API Key 不进入 GameView 或事件日志。 */
-public record LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens) {
+public record LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens,
+                        DecisionMode decisionMode, Integer requestTimeoutSeconds, TokenLimitParameter tokenLimitParameter) {
+    public LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens, DecisionMode decisionMode) {
+        this(baseUrl, apiKey, model, temperature, maxTokens, decisionMode, 45, TokenLimitParameter.MAX_TOKENS);
+    }
+    /** 旧调用和未提供模式的请求继续使用 JSON。 */
+    public LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens) {
+        this(baseUrl, apiKey, model, temperature, maxTokens, DecisionMode.JSON);
+    }
     public LlmConfig {
+        decisionMode = decisionMode == null ? DecisionMode.JSON : decisionMode;
+        // 未提供的新字段按旧行为兼容；前端新建对局可显式选择更长的等待时间。
+        requestTimeoutSeconds = requestTimeoutSeconds == null ? 45 : requestTimeoutSeconds;
+        tokenLimitParameter = tokenLimitParameter == null ? TokenLimitParameter.MAX_TOKENS : tokenLimitParameter;
+        if (requestTimeoutSeconds < 10 || requestTimeoutSeconds > 180)
+            throw new IllegalArgumentException("请求超时须为 10 至 180 秒");
         if (baseUrl == null || baseUrl.isBlank() || model == null || model.isBlank())
             throw new IllegalArgumentException("Base URL and model are required");
         if (Double.isNaN(temperature) || temperature < 0 || temperature > 2 || maxTokens < 1 || maxTokens > 8192)

@@ -4,6 +4,8 @@ import { phaseName, type ObserverNote } from "../types";
 import { describeNote } from "../observer";
 import KnowledgeUsagePanel from "./KnowledgeUsagePanel.vue";
 import type { KnowledgeRun } from "../knowledge";
+import type { ExperimentAction } from "../experiments";
+import DiagnosticDetails from "./DiagnosticDetails.vue";
 
 const props = defineProps<{
   notes: ObserverNote[] | null;
@@ -13,6 +15,7 @@ const props = defineProps<{
   notice?: string;
   knowledge?: KnowledgeRun | null;
   eventCount?: number;
+  actions?: ExperimentAction[];
 }>();
 const selectedPlayerId = defineModel<string>("selectedPlayerId", {
   default: "all",
@@ -27,6 +30,18 @@ const visible = computed(() =>
           note.playerId === selectedPlayerId.value),
     )
     .slice()
+    .reverse(),
+);
+// 诊断展示当前对局/完整存档的最新尝试，独立于回放游标；不会作为模型输入。
+const attempts = computed(() =>
+  (props.actions ?? [])
+    .filter(
+      (a) =>
+        a.metrics.apiCalls > 0 &&
+        (selectedPlayerId.value === "all" ||
+          a.playerId === selectedPlayerId.value),
+    )
+    .slice(-20)
     .reverse(),
 );
 </script>
@@ -75,5 +90,30 @@ const visible = computed(() =>
       :selected-player-id="selectedPlayerId"
       :event-count="eventCount"
     />
+    <details v-if="attempts.length" class="model-diagnostics">
+      <summary>
+        模型调用诊断（完整记录最近 {{ attempts.length }} 次行动尝试）
+      </summary>
+      <p class="observer-description">
+        诊断包含失败与纠错调用，与回放位置无关。更多逐行动记录可在“实验记录”查看。旧记录无法补回原始错误原因。
+      </p>
+      <div v-for="a in attempts" :key="a.sequence" class="observer-entry">
+        <div class="observer-entry-meta">
+          #{{ a.sequence }} · {{ a.playerId }} · 第 {{ a.day }} 天 ·
+          {{ phaseName[a.phase] ?? a.phase }}
+        </div>
+        <DiagnosticDetails :diagnostics="a.diagnostics" />
+      </div>
+    </details>
   </section>
 </template>
+<style scoped>
+.model-diagnostics {
+  margin-top: 20px;
+  font-size: 13px;
+}
+.model-diagnostics > summary {
+  cursor: pointer;
+  color: #d3bc91;
+}
+</style>

@@ -36,6 +36,9 @@ export const useLabStore = defineStore("lab", {
       model: "",
       temperature: 0.7,
       maxTokens: 1000,
+      decisionMode: "JSON",
+      requestTimeoutSeconds: 120,
+      tokenLimitParameter: "MAX_TOKENS",
     } as LlmConfig,
     busy: false,
     error: "",
@@ -92,7 +95,7 @@ export const useLabStore = defineStore("lab", {
       }
     },
     async createGame(seed?: number): Promise<string | null> {
-      // 只要存在 LLM Agent 就强制手动模式；创建请求不会调用模型进行整局推演。
+      // LLM 会话按单步模式创建；自动推进由用户开启，前端仍逐条提交推进指令。
       this.busy = true;
       this.error = "";
       try {
@@ -122,17 +125,27 @@ export const useLabStore = defineStore("lab", {
       }
     },
     async advanceGame(id: string, command: AdvanceCommand): Promise<boolean> {
-      // 后端决定下一条合法指令；这里每次只提交一次用户点击。
+      // 每次仍只提交一条后端允许的指令；手动和自动推进共用此入口，禁止重叠请求。
+      if (this.busy || this.current?.summary.gameId !== id) return false;
+      const request = this.viewRequest;
       this.busy = true;
       this.error = "";
       try {
-        this.current = (
+        const game = (
           await axios.post<Game>(`/api/games/${id}/advance`, { command })
         ).data;
+        // 用户可能在模型等待期间切换对局；旧响应不能覆盖新对局或其错误状态。
+        if (request !== this.viewRequest || this.current?.summary.gameId !== id)
+          return false;
+        this.current = game;
         await this.loadObserver(id);
+        if (request !== this.viewRequest || this.current?.summary.gameId !== id)
+          return false;
         if (this.current.summary.result !== "ONGOING") await this.loadGames();
         return true;
       } catch (error) {
+        if (request !== this.viewRequest || this.current?.summary.gameId !== id)
+          return false;
         this.error = axios.isAxiosError(error)
           ? error.response?.data?.error || "推进对局失败。"
           : "推进对局失败。";
@@ -140,7 +153,7 @@ export const useLabStore = defineStore("lab", {
         await this.loadObserver(id);
         return false;
       } finally {
-        this.busy = false;
+        if (request === this.viewRequest) this.busy = false;
       }
     },
   },
