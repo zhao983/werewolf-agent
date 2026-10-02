@@ -159,7 +159,12 @@ async function autoStep(run: number, id: string) {
   )
     return;
   const command = game.value.nextCommand;
-  if (!live.value || command === "NONE" || store.busy) {
+  if (
+    !live.value ||
+    command === "NONE" ||
+    store.busy ||
+    game.value.retryBlocked
+  ) {
     stopAutoAdvance();
     return;
   }
@@ -189,13 +194,20 @@ function toggleAutoAdvance() {
     !live.value ||
     store.busy ||
     !game.value ||
-    game.value.nextCommand === "NONE"
+    game.value.nextCommand === "NONE" ||
+    game.value.retryBlocked
   )
     return;
   autoNotice.value = "";
   autoAdvancing.value = true;
   const run = ++autoRun;
   void autoStep(run, game.value.summary.gameId);
+}
+async function allowRetry() {
+  if (!game.value || store.busy) return;
+  stopAutoAdvance();
+  if (await store.allowGameRetry(game.value.summary.gameId))
+    autoNotice.value = "已解除重试保护，可手动重试或重新开启自动推进。";
 }
 function resetCursor() {
   cursor.value = live.value ? Math.max(0, events.value.length - 1) : 0;
@@ -326,7 +338,7 @@ onBeforeUnmount(() => {
         <button
           v-if="game.nextCommand === 'NEXT_ACTION'"
           class="primary-button"
-          :disabled="store.busy || autoAdvancing"
+          :disabled="store.busy || autoAdvancing || game.retryBlocked"
           @click="advance('NEXT_ACTION')"
         >
           {{ store.busy ? "正在等待 Agent…" : actionLabel }} →
@@ -351,13 +363,27 @@ onBeforeUnmount(() => {
           class="subtle-button"
           :aria-pressed="autoAdvancing"
           :disabled="
-            !autoAdvancing && (store.busy || game.nextCommand === 'NONE')
+            !autoAdvancing &&
+            (store.busy || game.nextCommand === 'NONE' || game.retryBlocked)
           "
           @click="toggleAutoAdvance"
         >
           {{ autoAdvancing ? "暂停自动推进" : "自动推进" }}
         </button>
+        <button
+          v-if="game.retryBlocked"
+          class="subtle-button"
+          :disabled="store.busy"
+          @click="allowRetry"
+        >
+          解除重试保护
+        </button>
       </div>
+      <p v-if="game.retryBlocked" role="status">
+        本次行动连续失败 3
+        次，已暂停进一步模型请求。请先查看观战诊断；解除保护不会执行行动，再次推进可能继续产生用量。修改
+        AI 设置需新建对局。
+      </p>
       <p class="muted" aria-live="polite">
         {{
           autoNotice ||

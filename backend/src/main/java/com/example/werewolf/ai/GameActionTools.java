@@ -1,6 +1,8 @@
 package com.example.werewolf.ai;
 
 import com.example.werewolf.agent.*;
+import com.example.werewolf.agent.ActionOutput.Problem;
+import com.example.werewolf.agent.DecisionDiagnostic.OutputIssue;
 import com.example.werewolf.game.ActionValidator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.*;
@@ -47,41 +49,52 @@ public final class GameActionTools {
         Map<String, Object> function = new LinkedHashMap<>();
         function.put("name", name(action)); function.put("description", description);
         function.put("parameters", Map.of("type", "object", "properties", properties,
-                "required", List.copyOf(properties.keySet()), "additionalProperties", false));
+                "required", properties.keySet().stream().filter(field -> strict || !field.equals("reasoning")).toList(), "additionalProperties", false));
         // 普通工具模式省略 strict，兼容只支持基础 function calling 的服务。
         if (strict) function.put("strict", true);
         return Map.of("type", "function", "function", function);
     }
 
     public static AgentResponse parse(ObjectMapper mapper, AgentContext context, List<LlmClient.ToolCall> calls) {
+        return parse(mapper, context, calls, true);
+    }
+
+    /** 普通工具模式允许省略私有摘要；严格模式保持所有字段必填。 */
+    public static AgentResponse parse(ObjectMapper mapper, AgentContext context, List<LlmClient.ToolCall> calls, boolean requireReasoning) {
         // 即使接口忽略 parallel_tool_calls=false，也拒绝整批多工具，不能执行第一条后再报错。
-        if (calls.size() != 1) throw new IllegalArgumentException("必须且只能调用一个行动工具");
+        if (calls.isEmpty()) throw new Problem(OutputIssue.MISSING_TOOL, "缺少工具调用；必须通过本次提供的行动工具提交动作");
+        if (calls.size() != 1) throw new Problem(OutputIssue.MULTIPLE_TOOLS, "返回多个工具；每次只能提交一个行动工具");
         var call = calls.getFirst();
         ActionType action = context.availableActions().stream().filter(a -> name(a).equals(call.name())).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("工具不属于本次合法行动"));
-        if (!"function".equals(call.type()) || call.arguments() == null || call.arguments().length() > 8000)
-            throw new IllegalArgumentException("工具参数格式无效");
+                .orElseThrow(() -> new Problem(OutputIssue.UNKNOWN_TOOL, "工具名不属于本次合法行动；请复制本次提供的工具名"));
+        if (!"function".equals(call.type())) throw new Problem(OutputIssue.TOOL_TYPE, "工具类型必须为 function");
+        if (call.arguments() == null) throw new Problem(OutputIssue.MISSING_FIELD, "缺少工具 arguments");
+        if (call.arguments().length() > 8000) throw new Problem(OutputIssue.ARGUMENTS_TOO_LARGE, "工具参数超过8000字符；请缩短摘要和发言");
         JsonNode arguments;
         try {
             // 工具参数必须是单个真实对象；拒绝重复字段、代码围栏、尾随对象和类型自动转换。
             ObjectMapper reader = mapper.copy().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
                     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
             arguments = reader.readTree(call.arguments());
-        } catch (IOException e) { throw new IllegalArgumentException("工具参数不是合法 JSON 对象"); }
+        } catch (IOException e) { throw new Problem(OutputIssue.JSON_SYNTAX, "工具参数不是合法 JSON；禁止重复字段、代码围栏和尾随对象"); }
         Set<String> fields = action == ActionType.SPEAK ? Set.of("reasoning", "speech")
                 : action == ActionType.PASS ? Set.of("reasoning") : Set.of("reasoning", "targetPlayerId");
-        if (arguments == null || !arguments.isObject() || arguments.size() != fields.size())
-            throw new IllegalArgumentException("工具参数字段不完整");
-        for (String field : fields)
-            if (!arguments.path(field).isTextual()) throw new IllegalArgumentException("工具参数字段须为文本");
-        String reason = arguments.get("reasoning").asText();
+        if (arguments == null || !arguments.isObject()) throw new Problem(OutputIssue.JSON_OBJECT, "工具参数必须为单个 JSON 对象");
+        for (var names = arguments.fieldNames(); names.hasNext(); )
+            if (!fields.contains(names.next())) throw new Problem(OutputIssue.UNEXPECTED_FIELD, "工具参数包含未定义字段；只使用本次定义的字段");
+        for (String field : fields) {
+            if (!arguments.has(field) && (!field.equals("reasoning") || requireReasoning))
+                throw new Problem(OutputIssue.MISSING_FIELD, "工具参数缺少必填字段 " + field);
+            if (arguments.has(field) && !arguments.path(field).isTextual())
+                throw new Problem(OutputIssue.FIELD_TYPE, "工具字段 " + field + " 必须是文本");
+        }
+        String reason = arguments.has("reasoning") ? arguments.get("reasoning").asText() : null;
         String speech = action == ActionType.SPEAK ? arguments.get("speech").asText() : null;
-        if (reason.length() > 80 || (speech != null && speech.length() > 500))
-            throw new IllegalArgumentException("工具文本参数过长");
+        if (speech != null && speech.length() > 500)
+            throw new Problem(OutputIssue.SPEECH_TOO_LONG, "公开发言超过500字符；请缩短 speech，保留明确立场");
         AgentResponse response = new AgentResponse(reason, speech, action,
                 action == ActionType.SPEAK || action == ActionType.PASS ? null : arguments.get("targetPlayerId").asText());
-        try { ActionValidator.validate(context, response); }
-        catch (IllegalArgumentException e) { throw new IllegalArgumentException("工具动作或目标不合法"); }
+        ActionValidator.validate(context, response);
         return response;
     }
 }

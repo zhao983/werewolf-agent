@@ -142,7 +142,8 @@ public final class ExperimentAnalysis {
         Profiles profiles = new Profiles(sorted(complete.stream().map(s -> configKey(s.record().config())).toList()),
                 sorted(complete.stream().map(s -> s.game().model() == null ? "无 LLM" : model(s.game()) +
                         " | temperature=" + s.game().model().temperature() + " | maxTokens=" + s.game().model().maxTokens() +
-                        " | decisionMode=" + s.game().model().decisionMode() + " | timeout=" + s.game().model().requestTimeoutSeconds() +
+                        " | decisionMode=" + s.game().model().decisionMode() + " | thinking=" + s.game().model().enableThinking()
+                        + " | toolChoice=" + s.game().model().toolChoiceMode() + " | timeout=" + s.game().model().requestTimeoutSeconds() +
                         " | tokenLimitParameter=" + s.game().model().tokenLimitParameter()).toList()),
                 sorted(complete.stream().map(s -> String.join("/", s.record().agentTypes())).toList()),
                 sorted(complete.stream().map(s -> s.record().engineVersion()).toList()),

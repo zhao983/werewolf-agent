@@ -49,6 +49,9 @@ class GameControllerSecurityTest {
         mvc.perform(post("/api/games/" + id + "/advance").session(stranger)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"command\":\"NEXT_ACTION\"}"))
                 .andExpect(status().isForbidden());
+        mvc.perform(post("/api/games/" + id + "/retry").session(stranger)).andExpect(status().isForbidden());
+        // 未触发保护时，即使是创建者也不能用恢复接口代替推进或跳过玩家。
+        mvc.perform(post("/api/games/" + id + "/retry").session(owner)).andExpect(status().isBadRequest());
         assertEquals("[]", mvc.perform(get("/api/games").session(stranger))
                 .andReturn().getResponse().getContentAsString());
 

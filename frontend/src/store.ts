@@ -39,6 +39,8 @@ export const useLabStore = defineStore("lab", {
       decisionMode: "JSON",
       requestTimeoutSeconds: 120,
       tokenLimitParameter: "MAX_TOKENS",
+      enableThinking: null,
+      toolChoiceMode: "REQUIRED",
     } as LlmConfig,
     busy: false,
     error: "",
@@ -126,7 +128,12 @@ export const useLabStore = defineStore("lab", {
     },
     async advanceGame(id: string, command: AdvanceCommand): Promise<boolean> {
       // 每次仍只提交一条后端允许的指令；手动和自动推进共用此入口，禁止重叠请求。
-      if (this.busy || this.current?.summary.gameId !== id) return false;
+      if (
+        this.busy ||
+        this.current?.summary.gameId !== id ||
+        this.current.retryBlocked
+      )
+        return false;
       const request = this.viewRequest;
       this.busy = true;
       this.error = "";
@@ -150,7 +157,39 @@ export const useLabStore = defineStore("lab", {
           ? error.response?.data?.error || "推进对局失败。"
           : "推进对局失败。";
         // 请求失败仍可能已经记录一次模型尝试，刷新用户观战数据以展示该次知识使用。
+        try {
+          const game = (await axios.get<Game>(`/api/games/${id}`)).data;
+          if (
+            request === this.viewRequest &&
+            this.current?.summary.gameId === id
+          )
+            this.current = game;
+        } catch {
+          /* 保留原失败原因；刷新状态失败不自动追加模型请求。 */
+        }
         await this.loadObserver(id);
+        return false;
+      } finally {
+        if (request === this.viewRequest) this.busy = false;
+      }
+    },
+    /** 仅解除后端重试保护；之后仍需用户点击行动或重新开启自动推进。 */
+    async allowGameRetry(id: string): Promise<boolean> {
+      if (this.busy || this.current?.summary.gameId !== id) return false;
+      const request = this.viewRequest;
+      this.busy = true;
+      this.error = "";
+      try {
+        const game = (await axios.post<Game>(`/api/games/${id}/retry`)).data;
+        if (request !== this.viewRequest || this.current?.summary.gameId !== id)
+          return false;
+        this.current = game;
+        return true;
+      } catch (error) {
+        if (request === this.viewRequest && this.current?.summary.gameId === id)
+          this.error = axios.isAxiosError(error)
+            ? error.response?.data?.error || "解除保护失败。"
+            : "解除保护失败。";
         return false;
       } finally {
         if (request === this.viewRequest) this.busy = false;

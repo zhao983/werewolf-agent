@@ -28,6 +28,8 @@ class AgentObservationTest {
             session.advance(session.getAvailableCommand());
         }
         AgentContext seer = observation(observations, "player6", 1);
+        AgentContext wolf = observation(observations, "player1", 1);
+        assertTrue(wolf.privateInformation().stream().anyMatch(s -> s.equals("Wolf team night 1 final target: player3; individual KILL is only a proposal")));
         assertEquals(List.of(new PersonalAction(1, GamePhase.NIGHT_SEER, ActionType.CHECK, "player1")), seer.ownActionHistory());
         assertTrue(seer.privateInformation().contains("Night 1: player1 is WEREWOLF"));
         AgentContext witch = observation(observations, "player7", 1);
@@ -44,6 +46,7 @@ class AgentObservationTest {
             assertTrue(c.publicFacts().stream().allMatch(e -> Set.of("DAY_ANNOUNCEMENT", "PLAYER_EXILED", "PLAYER_DIED", "VOTE").contains(e.type())));
             if (c.role() != Role.SEER) assertTrue(c.privateInformation().stream().noneMatch(s -> s.startsWith("Night ")));
             if (c.role() != Role.WEREWOLF) assertTrue(c.privateInformation().stream().noneMatch(s -> s.startsWith("Wolf teammate:")));
+            if (c.role() != Role.WEREWOLF) assertTrue(c.privateInformation().stream().noneMatch(s -> s.startsWith("Wolf team night ")));
         }
         assertThrows(UnsupportedOperationException.class, () -> villager.publicFacts().clear());
         assertThrows(UnsupportedOperationException.class, () -> witch.ownActionHistory().clear());

@@ -14,7 +14,7 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
                                String source, String status, String createdAt, String updatedAt,
                                GameConfig config, List<String> agentTypes, long startSeed,
                                int requestedGames, List<GameSnapshot> games, String errorCode, String group, String notes) {
-    public static final String ENGINE_VERSION = "0.3.0-context-diagnostics-v1";
+    public static final String ENGINE_VERSION = "0.4.0-stability-v2";
     public ExperimentRecord {
         agentTypes = List.copyOf(agentTypes);
         games = List.copyOf(games);
@@ -31,11 +31,17 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
 
     /** 模型配置只保留可比较参数；API Key 与服务地址不进入记录。 */
     public record ModelSpec(String model, double temperature, int maxTokens, DecisionMode decisionMode,
-                            Integer requestTimeoutSeconds, com.example.werewolf.ai.TokenLimitParameter tokenLimitParameter) {
+                            Integer requestTimeoutSeconds, com.example.werewolf.ai.TokenLimitParameter tokenLimitParameter,
+                            Boolean enableThinking, com.example.werewolf.ai.ToolChoiceMode toolChoiceMode) {
         public ModelSpec {
             decisionMode = decisionMode == null ? DecisionMode.JSON : decisionMode;
             requestTimeoutSeconds = requestTimeoutSeconds == null ? 45 : requestTimeoutSeconds;
             tokenLimitParameter = tokenLimitParameter == null ? com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS : tokenLimitParameter;
+            toolChoiceMode = toolChoiceMode == null ? com.example.werewolf.ai.ToolChoiceMode.REQUIRED : toolChoiceMode;
+        }
+        public ModelSpec(String model, double temperature, int maxTokens, DecisionMode decisionMode,
+                         Integer requestTimeoutSeconds, com.example.werewolf.ai.TokenLimitParameter tokenLimitParameter) {
+            this(model, temperature, maxTokens, decisionMode, requestTimeoutSeconds, tokenLimitParameter, null, com.example.werewolf.ai.ToolChoiceMode.REQUIRED);
         }
         public ModelSpec(String model, double temperature, int maxTokens, DecisionMode decisionMode) {
             this(model, temperature, maxTokens, decisionMode, 45, com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS);
@@ -44,7 +50,7 @@ public record ExperimentRecord(int schemaVersion, String engineVersion, String i
         public ModelSpec(String model, double temperature, int maxTokens) { this(model, temperature, maxTokens, DecisionMode.JSON); }
         public static ModelSpec of(LlmConfig config) {
             return config == null ? null : new ModelSpec(config.model(), config.temperature(), config.maxTokens(), config.decisionMode(),
-                    config.requestTimeoutSeconds(), config.tokenLimitParameter());
+                    config.requestTimeoutSeconds(), config.tokenLimitParameter(), config.enableThinking(), config.toolChoiceMode());
         }
     }
     public record Seat(String playerId, Role role, String agentType, PlayerStatus status) { }

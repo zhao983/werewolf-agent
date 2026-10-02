@@ -15,7 +15,7 @@ public final class ExperimentCsv {
                 "status", "result", "days", "elapsed_ms", "action_attempts", "valid_actions", "invalid_actions",
                 "failed_actions", "invalid_replies", "api_calls", "api_failures", "usage_reported_calls",
                 "prompt_tokens_reported", "completion_tokens_reported", "total_tokens_reported", "decision_ms", "request_ms",
-                "experiment_group", "experiment_notes", "knowledge_mode", "knowledge_revision", "decision_mode", "request_timeout_seconds", "token_limit_parameter");
+                "experiment_group", "experiment_notes", "knowledge_mode", "knowledge_revision", "decision_mode", "request_timeout_seconds", "token_limit_parameter", "enable_thinking", "tool_choice_mode");
         for (GameSnapshot game : record.games()) {
             Summary s = Summary.of(java.util.List.of(game));
             var c = record.config();
@@ -34,7 +34,8 @@ public final class ExperimentCsv {
                     s.usageReportedCalls() == 0 ? null : s.totalTokens(), s.decisionMillis(), s.requestMillis(),
                     record.group(), record.notes(), ExperimentAnalysis.knowledgeMode(game), ExperimentAnalysis.knowledgeRevision(game),
                     game.model() == null ? null : game.model().decisionMode(), game.model() == null ? null : game.model().requestTimeoutSeconds(),
-                    game.model() == null ? null : game.model().tokenLimitParameter());
+                    game.model() == null ? null : game.model().tokenLimitParameter(),
+                    game.model() == null ? null : game.model().enableThinking(), game.model() == null ? null : game.model().toolChoiceMode());
         }
         return out.toString();
     }

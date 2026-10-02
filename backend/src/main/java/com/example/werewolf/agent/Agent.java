@@ -7,4 +7,8 @@ public interface Agent {
     default AgentMetrics lastMetrics() { return AgentMetrics.empty(); }
     /** 诊断只供用户查看；规则 Agent 没有模型请求诊断。 */
     default java.util.List<DecisionDiagnostic> lastDiagnostics() { return java.util.List.of(); }
+    /** 同一行动持续失败时暂停进一步请求；规则 Agent 不需要该保护。 */
+    default boolean retryBlocked() { return false; }
+    /** 用户明确恢复重试，仅解除请求保护，不执行或跳过游戏行动。 */
+    default void allowRetry() { }
 }

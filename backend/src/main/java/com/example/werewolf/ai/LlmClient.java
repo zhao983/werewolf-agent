@@ -34,5 +34,11 @@ public interface LlmClient {
             this(content, promptTokens, completionTokens, totalTokens, null, List.of());
         }
     }
-    record ResponseMetadata(Integer httpStatus, com.example.werewolf.agent.DecisionDiagnostic.FinishReason finishReason) { }
+    /** 仅保留推理用量数字，不读取或保存服务端 reasoning_content。 */
+    record ResponseMetadata(Integer httpStatus, com.example.werewolf.agent.DecisionDiagnostic.FinishReason finishReason,
+                            Long reasoningTokens) {
+        public ResponseMetadata(Integer httpStatus, com.example.werewolf.agent.DecisionDiagnostic.FinishReason finishReason) {
+            this(httpStatus, finishReason, null);
+        }
+    }
 }

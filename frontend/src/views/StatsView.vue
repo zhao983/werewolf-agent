@@ -920,6 +920,20 @@ onBeforeUnmount(() => {
             chosenGame.model.tokenLimitParameter === "MAX_COMPLETION_TOKENS"
               ? "max_completion_tokens"
               : "max_tokens"
+          }}
+          · 思考
+          {{
+            chosenGame.model.enableThinking == null
+              ? "服务默认"
+              : chosenGame.model.enableThinking
+                ? "开启"
+                : "关闭"
+          }}
+          · 工具选择
+          {{
+            chosenGame.model.toolChoiceMode === "AUTO"
+              ? "兼容选择"
+              : "强制工具"
           }}。 模型对局的种子只控制引擎随机过程，不保证外部模型输出可复现。
         </p>
         <div class="experiment-table-wrap">

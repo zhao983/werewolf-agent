@@ -76,6 +76,13 @@ public class GameController {
         finally { record(owner, id); }
     }
 
+    /** 仅创建者可明确解除保护；接口本身不调用模型。 */
+    @PostMapping("/{id}/retry")
+    public GameView allowRetry(@PathVariable String id, HttpServletRequest request) {
+        requireOwner(id, request);
+        return service.allowRetry(id);
+    }
+
     private void record(String owner, String id) {
         var data = service.snapshot(id);
         experiments.recordGame(owner, data.config(), data.agentTypes(), data.game());

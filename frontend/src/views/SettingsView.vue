@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { useLabStore } from "../store";
 const store = useLabStore();
+/** 用户主动选择兼容配置，不按模型名称或服务地址自动改写已创建对局。 */
+function applyQwenSettings() {
+  store.llm.enableThinking = false;
+  store.llm.tokenLimitParameter = "MAX_COMPLETION_TOKENS";
+  store.llm.toolChoiceMode = "AUTO";
+  store.llm.decisionMode = "TOOLS";
+}
 // API Key 仅保存在当前 Pinia 内存状态，不写入 localStorage。
 </script>
 <template>
@@ -60,7 +67,10 @@ const store = useLabStore();
               step="10"
           /></label>
           <label
-            >输出额度参数<select v-model="store.llm.tokenLimitParameter">
+            >输出额度参数<select
+              v-model="store.llm.tokenLimitParameter"
+              aria-label="输出额度参数"
+            >
               <option value="MAX_TOKENS">max_tokens（兼容默认）</option>
               <option value="MAX_COMPLETION_TOKENS">
                 max_completion_tokens
@@ -71,7 +81,21 @@ const store = useLabStore();
         <p class="muted">
           推理较慢的模型可延长超时。额度参数请按模型服务文档选择；部分服务使用
           max_completion_tokens 计入推理
-          Token。服务忽略额度或用量超过设置时，实验诊断会显示提示。纠错最多再请求一次。
+          Token。每次最多请求两次；超时、截断和服务错误直接暂停。私有摘要过长会本地缩短，不为此追加请求。
+        </p>
+        <label
+          >服务端思考模式<select
+            v-model="store.llm.enableThinking"
+            aria-label="服务端思考模式"
+          >
+            <option :value="null">沿用服务默认（不发送额外参数）</option>
+            <option :value="false">关闭思考（需服务支持）</option>
+            <option :value="true">开启思考（需服务支持）</option>
+          </select></label
+        >
+        <p class="muted">
+          开启或关闭会发送 enable_thinking
+          参数，只适用于支持该参数的接口。关闭可减少额外推理用量；仅支持思考的模型请选择服务默认。
         </p>
         <label
           >行动决策方式
@@ -83,6 +107,25 @@ const store = useLabStore();
             </option>
           </select>
         </label>
+        <label v-if="store.llm.decisionMode !== 'JSON'"
+          >工具选择策略<select
+            v-model="store.llm.toolChoiceMode"
+            aria-label="工具选择策略"
+          >
+            <option value="REQUIRED">强制工具（需支持 required）</option>
+            <option value="AUTO">兼容选择（Qwen 等服务）</option>
+          </select></label
+        >
+        <p v-if="store.llm.decisionMode !== 'JSON'" class="muted">
+          兼容选择在关闭思考且只提供一个工具时指定该工具，多工具时使用自动选择；后端始终拒绝缺少工具或多工具的动作。
+        </p>
+        <button type="button" class="subtle-button" @click="applyQwenSettings">
+          应用 Qwen 稳定性设置
+        </button>
+        <p class="muted">
+          适用于支持相关参数的 Qwen
+          兼容服务：普通工具、兼容选择、关闭思考、使用包含推理的输出额度。点击后可检查上方设置，创建新对局时生效。
+        </p>
         <p class="muted" v-if="store.llm.decisionMode === 'JSON'">
           通过 JSON 选择行动；格式或动作错误时自动纠正一次。
         </p>

@@ -105,6 +105,12 @@ public final class ExperimentImport {
                             && (d.httpStatus() == null || d.httpStatus() >= 100 && d.httpStatus() <= 599)
                             && (d.toolCallCount() == null || d.toolCallCount() >= 0 && d.toolCallCount() <= 1000), "模型诊断字段无效");
                     number(d.requestMillis());
+                    require(d.repairs().size() <= 2 && new HashSet<>(d.repairs()).size() == d.repairs().size(), "本地修正诊断无效");
+                    if (d.completionTokens() != null) number(d.completionTokens());
+                    if (d.reasoningTokens() != null) {
+                        number(d.reasoningTokens());
+                        require(d.completionTokens() == null || d.reasoningTokens() <= d.completionTokens(), "推理用量超过总输出用量");
+                    }
                 }
                 require(a.diagnostics().isEmpty() || a.diagnostics().size() == a.metrics().apiCalls(), "模型诊断与请求次数不一致");
             }

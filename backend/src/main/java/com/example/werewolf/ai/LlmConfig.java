@@ -2,7 +2,13 @@ package com.example.werewolf.ai;
 
 /** 单次模型连接参数；API Key 不进入 GameView 或事件日志。 */
 public record LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens,
-                        DecisionMode decisionMode, Integer requestTimeoutSeconds, TokenLimitParameter tokenLimitParameter) {
+                        DecisionMode decisionMode, Integer requestTimeoutSeconds, TokenLimitParameter tokenLimitParameter,
+                        Boolean enableThinking, ToolChoiceMode toolChoiceMode) {
+    /** 旧配置不发送服务特有的思考参数，保持已有接口兼容。 */
+    public LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens,
+                     DecisionMode decisionMode, Integer requestTimeoutSeconds, TokenLimitParameter tokenLimitParameter) {
+        this(baseUrl, apiKey, model, temperature, maxTokens, decisionMode, requestTimeoutSeconds, tokenLimitParameter, null, ToolChoiceMode.REQUIRED);
+    }
     public LlmConfig(String baseUrl, String apiKey, String model, double temperature, int maxTokens, DecisionMode decisionMode) {
         this(baseUrl, apiKey, model, temperature, maxTokens, decisionMode, 45, TokenLimitParameter.MAX_TOKENS);
     }
@@ -15,6 +21,7 @@ public record LlmConfig(String baseUrl, String apiKey, String model, double temp
         // 未提供的新字段按旧行为兼容；前端新建对局可显式选择更长的等待时间。
         requestTimeoutSeconds = requestTimeoutSeconds == null ? 45 : requestTimeoutSeconds;
         tokenLimitParameter = tokenLimitParameter == null ? TokenLimitParameter.MAX_TOKENS : tokenLimitParameter;
+        toolChoiceMode = toolChoiceMode == null ? ToolChoiceMode.REQUIRED : toolChoiceMode;
         if (requestTimeoutSeconds < 10 || requestTimeoutSeconds > 180)
             throw new IllegalArgumentException("请求超时须为 10 至 180 秒");
         if (baseUrl == null || baseUrl.isBlank() || model == null || model.isBlank())

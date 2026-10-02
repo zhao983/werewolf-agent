@@ -10,7 +10,7 @@
 
 代码位置：`backend/src/main/java/com/example/werewolf/agent/AgentContext.java`、`PersonalAction.java`、`agent/LlmAgent.java` 和 `game/GameEngine.java`。
 
-提示词优先说明本人编号、当前存活名单、公开事实和真实私有线索，再给出玩家发言及策略知识。为限制输入长度，保留最近 100 条公开事实、60 条本人行动和约 6000 字公开发言；当前存活/死亡名单与药剂状态始终完整提供，查验线索不受发言裁剪影响。
+提示词优先说明本人编号、当前存活名单、公开事实和真实私有线索，再给出玩家发言及策略知识。为限制输入长度，保留最近 100 条公开事实、60 条本人行动和约 4500 字公开发言；当前存活/死亡名单与药剂状态始终完整提供，查验线索不受发言裁剪影响。后续新增 `decisionFacts` 从裁剪前的白名单信息计算夜间结果、白天行动进度与公开可推导的人数上界，详见 [ca238ffa 稳定性修复](./ca238ffa稳定性修复.md)。
 
 测试：`game/AgentObservationTest` 验证查验记忆、救人后的药剂余量、放逐和夜间死亡公告、失败后原位重试、角色之间私有信息隔离；`agent/DecisionConsistencyTest` 验证新增字段确实进入模型提示。
 

@@ -45,6 +45,8 @@ export interface ExperimentGame {
     maxTokens: number;
     decisionMode?: "JSON" | "TOOLS" | "TOOLS_STRICT";
     requestTimeoutSeconds?: number;
+    enableThinking?: boolean | null;
+    toolChoiceMode?: "REQUIRED" | "AUTO";
     tokenLimitParameter?: "MAX_TOKENS" | "MAX_COMPLETION_TOKENS";
   } | null;
   seats: { playerId: string; role: Role; agentType: string; status: string }[];
@@ -55,6 +57,10 @@ export interface ExperimentGame {
 }
 /** 安全诊断只含分类及数值，不包含模型原始输出或密钥。 */
 export interface DecisionDiagnostic {
+  issue?: string | null;
+  repairs?: string[];
+  completionTokens?: number | null;
+  reasoningTokens?: number | null;
   attempt: number;
   code: string;
   httpStatus: number | null;
@@ -63,6 +69,37 @@ export interface DecisionDiagnostic {
   outputExceededLimit: boolean;
   requestMillis: number;
 }
+export const outputIssueName: Record<string, string> = {
+  MISSING_TOOL: "未调用工具",
+  MULTIPLE_TOOLS: "一次返回多个工具",
+  UNKNOWN_TOOL: "工具名不符合当前阶段",
+  TOOL_TYPE: "工具类型错误",
+  ARGUMENTS_TOO_LARGE: "参数消息过长",
+  JSON_SYNTAX: "参数解析失败",
+  JSON_OBJECT: "缺少有效动作对象",
+  MISSING_FIELD: "缺少必填参数",
+  UNEXPECTED_FIELD: "包含未定义参数",
+  FIELD_TYPE: "参数类型错误",
+  UNKNOWN_ACTION: "未知动作",
+  ACTION_NOT_ALLOWED: "阶段不允许该动作",
+  ILLEGAL_TARGET: "选择了非法目标",
+  UNEXPECTED_TARGET: "动作不应携带目标",
+  EMPTY_SPEECH: "发言为空",
+  SPEECH_TOO_LONG: "公开发言过长",
+  SELF_ID: "本人编号错误",
+  VOTE_TARGET: "理由与投票目标矛盾",
+  DEAD_PLAYER: "要求死亡玩家行动",
+  OWN_HISTORY: "否认本人已完成行动",
+  PRIVATE_ASIDE: "公开发言混入私有旁白",
+  NIGHT_FACT: "夜晚结果记错",
+  WOLF_COUNT: "存活狼人数矛盾",
+  WIN_RULE: "胜负规则错误",
+  WOLF_TARGET: "袭击意向与最终狼刀混淆",
+};
+export const localRepairName: Record<string, string> = {
+  REASONING_DEFAULTED: "未提供私有摘要，保留空摘要",
+  REASONING_TRIMMED: "私有摘要已本地缩短",
+};
 export const diagnosticName: Record<string, string> = {
   SUCCESS: "通过",
   TIMEOUT: "请求超时",

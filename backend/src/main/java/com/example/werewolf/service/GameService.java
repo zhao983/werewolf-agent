@@ -122,6 +122,12 @@ public class GameService {
         }
     }
 
+    /** 解除请求保护不会触发模型，也不会改变当前玩家、阶段或药剂。 */
+    public GameView allowRetry(String id) {
+        var session = find(id);
+        synchronized (session) { session.allowRetry(); return view(session, true); }
+    }
+
     public List<GameSummary> list() {
         synchronized (games) {
             return games.values().stream().map(run -> {
@@ -191,7 +197,7 @@ public class GameService {
         // 夜间行动者的 ID 本身会暴露身份；只在白天公开下一位玩家。
         boolean publicActor = state.getPhase() == GamePhase.DAY_DISCUSSION || state.getPhase() == GamePhase.DAY_VOTE;
         return new GameView(summary(state), state.getConfig(), players, events,
-                manual, session.getAvailableCommand(), publicActor ? session.getNextActorId() : null);
+                manual, session.getAvailableCommand(), publicActor ? session.getNextActorId() : null, session.retryBlocked());
     }
 
     private GameEvent publicEvent(GameEvent event) {
@@ -224,6 +230,6 @@ public class GameService {
     public record PlayerView(String id, String name, Role role, PlayerStatus status) { }
     public record GameView(GameSummary summary, GameConfig config, List<PlayerView> players,
                            List<GameEvent> events, boolean manual,
-                           AdvanceCommand nextCommand, String nextActorId) { }
+                           AdvanceCommand nextCommand, String nextActorId, boolean retryBlocked) { }
     public record ObserverView(List<PlayerView> players, List<ObserverNote> notes, Run knowledge, List<com.example.werewolf.game.ActionRecord> actions) { }
 }

@@ -21,6 +21,9 @@ export interface LlmConfig {
   decisionMode: "JSON" | "TOOLS" | "TOOLS_STRICT";
   requestTimeoutSeconds: number;
   tokenLimitParameter: "MAX_TOKENS" | "MAX_COMPLETION_TOKENS";
+  /** null 不发送服务特有参数；关闭选项仅用于支持 enable_thinking 的服务。 */
+  enableThinking: boolean | null;
+  toolChoiceMode: "REQUIRED" | "AUTO";
 }
 export interface GameSummary {
   gameId: string;
@@ -52,6 +55,7 @@ export interface Game {
   manual: boolean;
   nextCommand: AdvanceCommand;
   nextActorId: string | null;
+  retryBlocked?: boolean;
 }
 /** 观战接口与普通对局接口分开，只有页面读取此数据。 */
 export interface ObserverNote {

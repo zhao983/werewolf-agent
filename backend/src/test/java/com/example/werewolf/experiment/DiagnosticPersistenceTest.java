@@ -20,12 +20,14 @@ class DiagnosticPersistenceTest {
             public AgentResponse act(AgentContext c) { return AgentResponse.action(ActionType.PASS, null); }
             public AgentMetrics lastMetrics() { return new AgentMetrics(1, 0, 0, 1, 20, 10, 30, 10); }
             public List<DecisionDiagnostic> lastDiagnostics() { return List.of(new DecisionDiagnostic(1, DecisionDiagnostic.Code.SUCCESS, 200,
-                    DecisionDiagnostic.FinishReason.TOOL_CALLS, 1, false, 10)); }
+                    DecisionDiagnostic.FinishReason.TOOL_CALLS, 1, false, 10, null,
+                    List.of(DecisionDiagnostic.LocalRepair.REASONING_TRIMMED), 10L, 5L)); }
         };
         var session = new GameEngine(new Random(42), s -> { }).newSession(GameConfig.classicSeven(), Collections.nCopies(7, agent));
         session.advance(AdvanceCommand.NEXT_ACTION);
         var types = Collections.nCopies(7, "LLM");
-        var model = new ModelSpec("mock", .7, 1000, com.example.werewolf.ai.DecisionMode.TOOLS, 120, com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS);
+        var model = new ModelSpec("mock", .7, 1000, com.example.werewolf.ai.DecisionMode.TOOLS, 120, com.example.werewolf.ai.TokenLimitParameter.MAX_TOKENS,
+                false, com.example.werewolf.ai.ToolChoiceMode.AUTO);
         var game = GameSnapshot.capture(session.getState(), 42, types, java.time.Instant.now().toString(), model, false);
         return new ExperimentRecord(1, ExperimentRecord.ENGINE_VERSION, game.gameId(), "诊断回归", "SINGLE", "RUNNING",
                 game.startedAt(), game.startedAt(), GameConfig.classicSeven(), types, 42, 1, List.of(game), null);
@@ -41,6 +43,7 @@ class DiagnosticPersistenceTest {
             assertEquals(sample.games().getFirst().actions(), view.record().games().getFirst().actions());
             var imported = restored.importRecord(owner, mapper.writeValueAsBytes(view));
             assertEquals(sample.games().getFirst().actions(), imported.record().games().getFirst().actions());
+            assertEquals(sample.games().getFirst().model(), imported.record().games().getFirst().model());
             assertTrue(ExperimentCsv.actions(imported.record()).contains("SUCCESS"));
             var legacy = mapper.valueToTree(view.record());
             ((ObjectNode) legacy.path("games").get(0).path("actions").get(0)).remove("diagnostics");
@@ -57,5 +60,16 @@ class DiagnosticPersistenceTest {
         var tree = mapper.valueToTree(sample());
         ((ObjectNode) tree.path("games").get(0).path("actions").get(0).path("metrics")).put("apiCalls", 2);
         assertThrows(IllegalArgumentException.class, () -> ExperimentImport.parse(mapper, mapper.writeValueAsBytes(tree)));
+    }
+    @Test void rejectsUnsafeSubtypesAndInvalidNewUsageFields() throws Exception {
+        for (String field : List.of("issue", "repairs", "completionTokens", "reasoningTokens")) {
+            var tree = mapper.valueToTree(sample());
+            var d = (ObjectNode) tree.path("games").get(0).path("actions").get(0).path("diagnostics").get(0);
+            if (field.equals("issue")) d.put(field, "untrusted-provider-text");
+            else if (field.equals("repairs")) d.putArray(field).add("untrusted-provider-text");
+            else if (field.equals("reasoningTokens")) d.put(field, 11);
+            else d.put(field, -1);
+            assertThrows(IllegalArgumentException.class, () -> ExperimentImport.parse(mapper, mapper.writeValueAsBytes(tree)));
+        }
     }
 }

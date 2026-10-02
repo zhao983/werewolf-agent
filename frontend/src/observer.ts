@@ -6,6 +6,13 @@ export function describeNote(note: ObserverNote): string {
   if (note.kind === "CLUE") {
     const teammate = /^Wolf teammate: (.*)$/.exec(note.text);
     if (teammate) return `狼队友：${teammate[1] || "无"}`;
+    // 最终狼刀回执属于狼人私有线索，观战页面仅负责中文展示。
+    const wolfTarget =
+      /^Wolf team night (\d+) final target: (player\d+|nobody); individual KILL is only a proposal$/.exec(
+        note.text,
+      );
+    if (wolfTarget)
+      return `第 ${wolfTarget[1]} 夜狼队最终袭击目标：${wolfTarget[2] === "nobody" ? "无人" : wolfTarget[2]}；个人选人只是袭击意向。`;
     const check = /^Night (\d+): (player\d+) is (WEREWOLF|GOOD)$/.exec(
       note.text,
     );

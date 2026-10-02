@@ -128,12 +128,23 @@ public final class GameEngine {
         public synchronized void advance(AdvanceCommand command) {
             if (command == null || command != getAvailableCommand())
                 throw new IllegalArgumentException("当前阶段不允许该推进指令；应使用 " + getAvailableCommand());
+            if (command == AdvanceCommand.NEXT_ACTION && retryBlocked())
+                throw new IllegalStateException("本次行动已连续失败3次，已暂停模型请求；请先查看诊断，再点击‘解除重试保护’");
             switch (command) {
                 case NEXT_ACTION -> actNext();
                 case COMPLETE_PHASE -> completePhase();
                 case END_DAY -> endDay();
                 default -> throw new IllegalArgumentException("对局已结束");
             }
+        }
+
+        /** 在玩家行动开始前检查保护，阻止连续点击产生新的请求或重复失败记录。 */
+        public synchronized boolean retryBlocked() {
+            return getAvailableCommand() == AdvanceCommand.NEXT_ACTION && actors.get(actorIndex).getAgent().retryBlocked();
+        }
+        public synchronized void allowRetry() {
+            if (!retryBlocked()) throw new IllegalArgumentException("当前行动没有触发重试保护");
+            actors.get(actorIndex).getAgent().allowRetry();
         }
 
         private void enterPhase(GamePhase phase) {
@@ -276,6 +287,10 @@ public final class GameEngine {
                     wolfTarget = choosePlurality(wolfVotes);
                     state.event("WOLF_TARGET", null, wolfTarget,
                             "Werewolves choose: " + (wolfTarget == null ? "nobody" : wolfTarget));
+                    // 仅向狼队提供汇总回执；不包含女巫用药、具体好人身份或预言家查验。
+                    for (Player wolf : alive(state).stream().filter(p -> p.getRole() == Role.WEREWOLF).toList())
+                        state.privateInfo(wolf.getId(), "Wolf team night " + state.getDayNumber() + " final target: "
+                                + (wolfTarget == null ? "nobody" : wolfTarget) + "; individual KILL is only a proposal");
                     enterPhase(GamePhase.NIGHT_SEER);
                 }
                 case NIGHT_SEER -> enterPhase(GamePhase.NIGHT_WITCH);

@@ -46,9 +46,15 @@ public final class OpenAiCompatibleClient implements LlmClient {
             Map<String, Object> payload = new LinkedHashMap<>(Map.of(
                     "model", config.model(), "temperature", config.temperature(),
                     config.tokenLimitParameter().field(), config.maxTokens(), "messages", List.of(Map.of("role", "user", "content", prompt))));
+            // 显式选择才发送非标准参数；不根据模型名称猜测第三方接口支持情况。
+            if (config.enableThinking() != null) payload.put("enable_thinking", config.enableThinking());
             if (tools != null) {
                 payload.put("tools", tools);
-                payload.put("tool_choice", "required");
+                // Qwen 等服务不保证支持 required。关闭思考且只有一个工具时，可指定该工具；多工具用 auto。
+                Object choice = config.toolChoiceMode() == ToolChoiceMode.REQUIRED ? "required"
+                        : tools.size() == 1 && Boolean.FALSE.equals(config.enableThinking())
+                        ? Map.of("type", "function", "function", Map.of("name", ((Map<?, ?>) tools.getFirst().get("function")).get("name"))) : "auto";
+                payload.put("tool_choice", choice);
                 payload.put("parallel_tool_calls", false);
             }
             String body = mapper.writeValueAsString(payload);
@@ -66,6 +72,9 @@ public final class OpenAiCompatibleClient implements LlmClient {
                 throw new ModelRequestException(Code.HTTP_ERROR, response.statusCode(), "Model API returned HTTP " + response.statusCode() + hint);
             }
             JsonNode root = mapper.readTree(response.body());
+            if (root == null || !root.path("choices").isArray() || root.path("choices").isEmpty()
+                    || !root.path("choices").path(0).path("message").isObject())
+                throw new ModelRequestException(Code.RESPONSE_ERROR, receivedStatus, "模型接口缺少 choices 或 message，不能作为行动响应");
             JsonNode choice = root.path("choices").path(0);
             JsonNode content = choice.path("message").path("content");
             JsonNode usage = root.path("usage");
@@ -84,14 +93,18 @@ public final class OpenAiCompatibleClient implements LlmClient {
             String problem = null;
             // 推理模型可能耗尽输出额度而没有生成最终消息，此时给出可操作的错误原因。
             if ("length".equals(choice.path("finish_reason").asText()))
-                problem = "模型输出达到 Max Tokens 上限，请在 AI 设置中调高 Max Tokens";
+                problem = "模型输出被截断（Max Tokens）；请核对输出预算与思考设置，不会自动追加请求或执行残缺动作";
             else if (tools == null && (!content.isTextual() || content.asText().isBlank()))
                 problem = "模型接口未返回可读取的消息内容";
             // 工具回复允许 content=null；缺失工具调用属于非法回复，由 Agent 最多纠正一次。
             // 空回复同样可能已经消耗 token，因此把 usage 与安全错误一起交给统计层。
+            Long completion = tokenCount(usage.path("completion_tokens"));
+            Long reasoning = tokenCount(usage.path("completion_tokens_details").path("reasoning_tokens"));
+            if (completion != null && reasoning != null && reasoning > completion) reasoning = null;
             return new ChatResult(content.isTextual() ? content.asText() : null, tokenCount(usage.path("prompt_tokens")),
-                    tokenCount(usage.path("completion_tokens")), tokenCount(usage.path("total_tokens")), problem, calls,
-                    new ResponseMetadata(response.statusCode(), DecisionDiagnostic.finish(text(choice.path("finish_reason")))));
+                    completion, tokenCount(usage.path("total_tokens")), problem, calls,
+                    new ResponseMetadata(response.statusCode(), DecisionDiagnostic.finish(text(choice.path("finish_reason"))),
+                            reasoning));
         } catch (java.net.http.HttpTimeoutException e) {
             throw new ModelRequestException(Code.TIMEOUT, null, "模型请求超过 " + config.requestTimeoutSeconds() + " 秒，请检查服务或调整 AI 设置中的请求超时后新建对局");
         } catch (InterruptedException e) {
